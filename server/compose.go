@@ -1,7 +1,7 @@
 package server
 
 import (
-	"fmt"
+	"errors"
 
 	"github.com/nytlabs/st-core/core"
 )
@@ -72,10 +72,46 @@ func (p *Pattern) components() []*Pattern {
 	return components
 }
 
+// composable checks to see if the incoming pattern can be composed
+func (p *Pattern) composable() error {
+	library := GetLibrary()
+
+	if len(p.Sources) > 0 || len(p.Links) > 0 {
+		return errors.New("can only compose blocks and connections")
+	}
+
+	source := core.NONE
+	for _, b := range p.Blocks {
+		spec, ok := library[b.Type]
+		if !ok {
+			return errors.New("can only compose core blocks, must decompose compositions first")
+		}
+
+		if source == core.NONE && spec.Source != core.NONE {
+			source = spec.Source
+		} else if source != core.NONE && source != spec.Source {
+			return errors.New("composed blocks may only use one type of source")
+		}
+	}
+
+	return nil
+}
+
+func (p *Pattern) head() []BlockLedger {
+	return p.Blocks
+}
+
+func (p *Pattern) tail() []BlockLedger {
+	return p.Blocks
+}
+
 func (p *Pattern) Spec() (*core.Spec, error) {
+	err := p.composable()
+	if err != nil {
+		return nil, err
+	}
 
 	c := p.components()
-	fmt.Println(c)
 
 	return nil, nil
 }
