@@ -8,40 +8,61 @@ import (
 
 // components returns an array of array of ids
 // each array of ids is a single connected component in the pattern graph
-func (p *Pattern) components() [][]int {
-	var connected func(int) []int
-	components := [][]int{}
+func (p *Pattern) components() []*Pattern {
+	var connected func(BlockLedger) ([]BlockLedger, []ConnectionLedger)
+	components := []*Pattern{}
 	blocks := make(map[int]BlockLedger)
+	connections := make(map[int]ConnectionLedger)
 
 	for _, b := range p.Blocks {
 		blocks[b.Id] = b
 	}
 
+	for _, c := range p.Connections {
+		connections[c.Id] = c
+	}
+
 	// traverses graph head and tail at the same time
 	// returns a list of block ids connected to a single block id
-	connected = func(id int) []int {
-		delete(blocks, id)
-		ids := []int{id}
+	connected = func(block BlockLedger) ([]BlockLedger, []ConnectionLedger) {
+		cblocks := []BlockLedger{block}
+		cconns := []ConnectionLedger{}
+
+		delete(blocks, block.Id)
+
 		for _, c := range p.Connections {
-			if c.Source.Id == id {
+			if c.Source.Id == block.Id {
 				if _, ok := blocks[c.Target.Id]; !ok {
 					continue
 				}
-				ids = append(ids, connected(c.Target.Id)...)
+				cconns = append(cconns, c)
+				delete(connections, c.Id)
+				tb, tc := connected(blocks[c.Target.Id])
+				cblocks = append(cblocks, tb...)
+				cconns = append(cconns, tc...)
 			}
-			if c.Target.Id == id {
+			if c.Target.Id == block.Id {
 				if _, ok := blocks[c.Source.Id]; !ok {
 					continue
 				}
-				ids = append(ids, connected(c.Source.Id)...)
+				cconns = append(cconns, c)
+				delete(connections, c.Id)
+				tb, tc := connected(blocks[c.Source.Id])
+				cblocks = append(cblocks, tb...)
+				cconns = append(cconns, tc...)
 			}
 		}
-		return ids
+		return cblocks, cconns
 	}
 
 	for len(blocks) > 0 {
-		for k, _ := range blocks {
-			components = append(components, connected(k))
+		for _, b := range blocks {
+			pb, pc := connected(b)
+			components = append(components, &Pattern{
+				Blocks:      pb,
+				Connections: pc,
+			})
+
 		}
 	}
 
