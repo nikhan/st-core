@@ -6,6 +6,11 @@ import (
 	"github.com/nytlabs/st-core/core"
 )
 
+const (
+	IN  = -1
+	OUT = 1
+)
+
 // components returns connected subgraphs of the pattern as patterns
 // only uses blocks, connections and ignores groups, sources, links
 func (p *Pattern) components() []*Pattern {
@@ -99,12 +104,43 @@ func (p *Pattern) composableSource() (*core.SourceType, error) {
 	return &source, nil
 }
 
-func (p *Pattern) head() []BlockLedger {
-	return p.Blocks
+func (p *Pattern) zerodegree(w int) []BlockLedger {
+	blocks := make(map[int]BlockLedger)
+	for _, b := range p.Blocks {
+		blocks[b.Id] = b
+	}
+
+	for _, c := range p.Connections {
+		for k, _ := range blocks {
+			switch w {
+			case IN:
+				if c.Target.Id == k {
+					delete(blocks, k)
+				}
+			case OUT:
+				if c.Source.Id == k {
+					delete(blocks, k)
+				}
+			}
+		}
+	}
+
+	bs := make([]BlockLedger, len(blocks))
+	i := 0
+	for _, v := range blocks {
+		bs[i] = v
+		i++
+	}
+	return bs
 }
 
-func (p *Pattern) tail() []BlockLedger {
-	return p.Blocks
+func (p *Pattern) sinks() []BlockLedger {
+	return p.zerodegree(OUT)
+
+}
+
+func (p *Pattern) sources() []BlockLedger {
+	return p.zerodegree(IN)
 }
 
 func (p *Pattern) Spec() (*core.Spec, error) {
