@@ -6,58 +6,52 @@ import (
 	"github.com/nytlabs/st-core/core"
 )
 
-func (p *Pattern) components() ([]*Pattern, error) {
-	blocks := make([]BlockLedger, len(p.Blocks))
-	copy(blocks, p.Blocks)
-	components := []*Pattern{}
-
+// components returns an array of array of ids
+// each array of ids is a single connected component in the pattern graph
+func (p *Pattern) components() [][]int {
 	var connected func(int) []int
+	components := [][]int{}
+	blocks := make(map[int]BlockLedger)
+
+	for _, b := range p.Blocks {
+		blocks[b.Id] = b
+	}
+
+	// traverses graph head and tail at the same time
+	// returns a list of block ids connected to a single block id
 	connected = func(id int) []int {
-		ids := []int{}
+		delete(blocks, id)
+		ids := []int{id}
 		for _, c := range p.Connections {
 			if c.Source.Id == id {
+				if _, ok := blocks[c.Target.Id]; !ok {
+					continue
+				}
 				ids = append(ids, connected(c.Target.Id)...)
 			}
 			if c.Target.Id == id {
-				ids = append(ids, connected(c.Target.Id)...)
+				if _, ok := blocks[c.Source.Id]; !ok {
+					continue
+				}
+				ids = append(ids, connected(c.Source.Id)...)
 			}
 		}
 		return ids
 	}
-	fmt.Println(blocks)
-	for len(blocks) > 0 {
-		cp := &Pattern{}
-		start, blocks := blocks[len(blocks)-1], blocks[:len(blocks)-1]
-		cp.Blocks = append(cp.Blocks, start)
 
-		ids := connected(start.Id)
-		newBlocks := []BlockLedger{}
-		for _, b := range blocks {
-			remove := false
-			for _, id := range ids {
-				if id == b.Id {
-					cp.Blocks = append(cp.Blocks, b)
-					remove = true
-				}
-			}
-			if remove {
-				fmt.Println("REMOVED")
-				continue
-			}
-			newBlocks = append(newBlocks, b)
+	for len(blocks) > 0 {
+		for k, _ := range blocks {
+			components = append(components, connected(k))
 		}
-		blocks = newBlocks
-		components = append(components, cp)
 	}
-	return components, nil
+
+	return components
 }
 
 func (p *Pattern) Spec() (*core.Spec, error) {
 
-	_, err := p.components()
-	if err != nil {
-		return nil, err
-	}
+	c := p.components()
+	fmt.Println(c)
 
 	return nil, nil
 }
