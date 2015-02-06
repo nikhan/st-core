@@ -6,8 +6,8 @@ import (
 	"github.com/nytlabs/st-core/core"
 )
 
-// components returns an array of array of ids
-// each array of ids is a single connected component in the pattern graph
+// components returns connected subgraphs of the pattern as patterns
+// only uses blocks, graphs and ignores groups, sources, links
 func (p *Pattern) components() []*Pattern {
 	var connected func(BlockLedger) ([]BlockLedger, []ConnectionLedger)
 	components := []*Pattern{}
@@ -23,7 +23,6 @@ func (p *Pattern) components() []*Pattern {
 	}
 
 	// traverses graph head and tail at the same time
-	// returns a list of block ids connected to a single block id
 	connected = func(block BlockLedger) ([]BlockLedger, []ConnectionLedger) {
 		cblocks := []BlockLedger{block}
 		cconns := []ConnectionLedger{}
