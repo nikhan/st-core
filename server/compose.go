@@ -7,10 +7,11 @@ import (
 )
 
 // components returns connected subgraphs of the pattern as patterns
-// only uses blocks, graphs and ignores groups, sources, links
+// only uses blocks, connections and ignores groups, sources, links
 func (p *Pattern) components() []*Pattern {
-	var connected func(BlockLedger) ([]BlockLedger, []ConnectionLedger)
 	components := []*Pattern{}
+
+	// caches to mark what has already been added to a subgraph/pattern
 	blocks := make(map[int]BlockLedger)
 	connections := make(map[int]ConnectionLedger)
 
@@ -23,6 +24,7 @@ func (p *Pattern) components() []*Pattern {
 	}
 
 	// traverses graph head and tail at the same time
+	var connected func(BlockLedger) ([]BlockLedger, []ConnectionLedger)
 	connected = func(block BlockLedger) ([]BlockLedger, []ConnectionLedger) {
 		cblocks := []BlockLedger{block}
 		cconns := []ConnectionLedger{}
@@ -30,26 +32,28 @@ func (p *Pattern) components() []*Pattern {
 		delete(blocks, block.Id)
 
 		for _, c := range p.Connections {
+			var traverseId int
+
+			// if this connection includes our block
 			if c.Source.Id == block.Id {
-				if _, ok := blocks[c.Target.Id]; !ok {
-					continue
-				}
-				cconns = append(cconns, c)
-				delete(connections, c.Id)
-				tb, tc := connected(blocks[c.Target.Id])
-				cblocks = append(cblocks, tb...)
-				cconns = append(cconns, tc...)
+				traverseId = c.Target.Id
+			} else if c.Target.Id == block.Id {
+				traverseId = c.Source.Id
+			} else {
+				continue
 			}
-			if c.Target.Id == block.Id {
-				if _, ok := blocks[c.Source.Id]; !ok {
-					continue
-				}
-				cconns = append(cconns, c)
-				delete(connections, c.Id)
-				tb, tc := connected(blocks[c.Source.Id])
-				cblocks = append(cblocks, tb...)
-				cconns = append(cconns, tc...)
+
+			// if we've already seen this block don't traverse
+			if _, ok := blocks[traverseId]; !ok {
+				continue
 			}
+
+			// get block's neighbors
+			cconns = append(cconns, c)
+			delete(connections, c.Id)
+			tb, tc := connected(blocks[traverseId])
+			cblocks = append(cblocks, tb...)
+			cconns = append(cconns, tc...)
 		}
 		return cblocks, cconns
 	}
