@@ -39,3 +39,20 @@ func TestPatternComponents(t *testing.T) {
 		}
 	}
 }
+
+func TestPatternSpec(t *testing.T) {
+	for _, p := range tests {
+		var po Pattern
+		err := json.Unmarshal([]byte(p.PatternInput), &po)
+		if err != nil {
+			fmt.Println(err)
+		}
+
+		s, err := po.Spec()
+		if err != nil {
+			t.Fail()
+		}
+		fmt.Printf("%+v\n", s)
+	}
+
+}

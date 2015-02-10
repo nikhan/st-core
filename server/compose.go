@@ -2,6 +2,7 @@ package server
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/nytlabs/st-core/core"
 )
@@ -143,13 +144,104 @@ func (p *Pattern) sources() []BlockLedger {
 	return p.zerodegree(IN)
 }
 
+func (p *Pattern) tails(b BlockLedger) []BlockLedger {
+	tails := []BlockLedger{}
+	blocks := make(map[int]BlockLedger)
+
+	for _, block := range p.Blocks {
+		blocks[block.Id] = block
+	}
+
+	for _, c := range p.Connections {
+		if c.Target.Id == b.Id {
+			tails = append(tails, blocks[c.Source.Id])
+		}
+	}
+
+	return tails
+}
+
 func (p *Pattern) Spec() (*core.Spec, error) {
-	_, err := p.composableSource()
+	source, err := p.composableSource()
 	if err != nil {
 		return nil, err
 	}
 
-	_ = p.components()
+	patterns := p.components()
 
-	return nil, nil
+	inputs := []core.Pin{}
+	outputs := []core.Pin{}
+
+	blocks := make(map[int]*BlockLedger)
+	for i, _ := range p.Blocks {
+		blocks[p.Blocks[i].Id] = &p.Blocks[i]
+	}
+
+	depths := make(map[*BlockLedger]int)
+
+	var traverse func(*BlockLedger, int)
+	traverse = func(b *BlockLedger, depth int) {
+		depth++
+		if _, ok := depths[b]; !ok {
+			depths[b] = depth
+		}
+
+		parents := []*BlockLedger{}
+		for _, c := range p.Connections {
+			if c.Target.Id == b.Id {
+				parents = append(parents, blocks[c.Source.Id])
+			}
+		}
+
+		if len(parents) > 0 {
+			for _, parent := range parents {
+				traverse(parent, depth)
+			}
+		}
+		return
+
+	}
+
+	maxDepth := 0
+	for _, pattern := range patterns {
+		sinks := pattern.sinks()
+		for _, s := range sinks {
+			traverse(&s, -1)
+			for _, v := range depths {
+				if v > maxDepth {
+					maxDepth = v
+				}
+			}
+		}
+	}
+
+	for k, v := range depths {
+		fmt.Println(k.Type, v)
+	}
+
+	tiers := make([][]*BlockLedger, maxDepth+1)
+
+	for i := 0; i < maxDepth; i++ {
+		tiers[i] = []*BlockLedger{}
+	}
+
+	for k, v := range depths {
+		tiers[v] = append(tiers[v], k)
+	}
+
+	fmt.Println(tiers)
+
+	kernel := func(in, out, internal core.MessageMap, s core.Source, i chan core.Interrupt) core.Interrupt {
+		return nil
+	}
+
+	composed := core.Spec{
+		Name:    "composed",
+		Source:  *source,
+		Inputs:  inputs,
+		Outputs: outputs,
+		Kernel:  kernel,
+	}
+
+	return &composed, nil
 }
