@@ -89,13 +89,14 @@ func (s *Server) DetachChild(g Node) error {
 	parent.Children = append(parent.Children[:child], parent.Children[child+1:]...)
 
 	update := struct {
-		Id    int `json:"id"`
-		Child int `json:"child"`
+		Id     int    `json:"id"`
+		Child  int    `json:"child"`
+		Action string `json:"string"`
 	}{
-		parent.GetID(), g.GetID(),
+		parent.GetID(), g.GetID(), DELETE,
 	}
 
-	s.websocketBroadcast(Update{Action: DELETE, Type: GROUP_CHILD, Data: update})
+	s.websocketBroadcast(Update{Action: DELETE, Type: GROUP, Data: update})
 	return nil
 }
 
@@ -123,13 +124,14 @@ func (s *Server) AddChildToGroup(id int, n Node) error {
 	n.SetParent(newParent)
 
 	update := struct {
-		Id    int `json:"id"`
-		Child int `json:"child"`
+		Id     int    `json:"id"`
+		Child  int    `json:"child"`
+		Action string `json:"action"`
 	}{
-		id, nid,
+		id, nid, CREATE,
 	}
 
-	s.websocketBroadcast(Update{Action: UPDATE, Type: GROUP_CHILD, Data: update})
+	s.websocketBroadcast(Update{Action: UPDATE, Type: GROUP, Data: update})
 	return nil
 }
 
