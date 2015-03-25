@@ -1,6 +1,10 @@
 package core
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+	"log"
+)
 
 // NewBlock creates a new block from a spec
 func NewBlock(s Spec) *Block {
@@ -25,6 +29,7 @@ func NewBlock(s Spec) *Block {
 	}
 
 	return &Block{
+		Name: s.Name,
 		state: BlockState{
 			make(MessageMap),
 			make(MessageMap),
@@ -46,19 +51,20 @@ func NewBlock(s Spec) *Block {
 func (b *Block) Serve() {
 	for {
 		var interrupt Interrupt
-
+		fmt.Println("int loop")
 		b.routing.RLock()
 		for {
+			fmt.Println("waiitng recieing")
 			interrupt = b.receive()
 			if interrupt != nil {
 				break
 			}
-
+			fmt.Println("Proces")
 			interrupt = b.process()
 			if interrupt != nil {
 				break
 			}
-
+			fmt.Println("BRoadcast")
 			interrupt = b.broadcast()
 			if interrupt != nil {
 				break
@@ -68,7 +74,9 @@ func (b *Block) Serve() {
 		}
 		b.routing.RUnlock()
 		b.routing.Lock()
+		fmt.Println("INTErpT")
 		if ok := interrupt(); !ok {
+			b.routing.Unlock()
 			return
 		}
 		b.routing.Unlock()
@@ -218,24 +226,23 @@ func (b *Block) Disconnect(id RouteIndex, c Connection) error {
 }
 
 func (b *Block) Reset() error {
-	returnVal := make(chan error, 1)
-	b.routing.InterruptChan <- func() bool {
-		b.crank()
-		returnVal <- nil
-		return true
-	}
-	return <-returnVal
+	b.crank()
+	return nil
 }
 
 // suture: stop the block
 func (b *Block) Stop() {
+	fmt.Println("waiting..")
 	b.routing.InterruptChan <- func() bool {
 		return false
 	}
+	fmt.Println("Done")
 }
 
 // wait and listen for all kernel inputs to be filled.
 func (b *Block) receive() Interrupt {
+	fmt.Println("** ", b.Name, " receiving")
+
 	for id, input := range b.routing.Inputs {
 		//if we have already received a value on this input, skip.
 		if _, ok := b.state.inputValues[RouteIndex(id)]; ok {
@@ -249,11 +256,13 @@ func (b *Block) receive() Interrupt {
 
 		select {
 		case m := <-input.C:
+			fmt.Println("** ", b.Name, ":", id, " recieved ", m)
 			b.state.inputValues[RouteIndex(id)] = m
 		case f := <-b.routing.InterruptChan:
 			return f
 		}
 	}
+	fmt.Println("** ", b.Name, " done receiving")
 	return nil
 }
 
@@ -321,23 +330,27 @@ func (b *Block) broadcast() Interrupt {
 				return f
 			}
 		}
+		fmt.Println("** ", b.Name, " broadcasting")
 		for c, _ := range out.Connections {
 			// check to see if we have delivered a message to this
 			// connection for this block crank. if we have, then
 			// skip this delivery.
 			m := ManifestPair{id, c}
 			if _, ok := b.state.manifest[m]; ok {
+				log.Println("** CraNK!")
 				continue
 			}
 
 			select {
 			case c <- b.state.outputValues[RouteIndex(id)]:
+				fmt.Println("** ", b.Name, ", delivering ", id, " : ", b.state.outputValues[RouteIndex(id)])
 				// set that we have delivered the message.
 				b.state.manifest[m] = struct{}{}
 			case f := <-b.routing.InterruptChan:
 				return f
 			}
 		}
+		fmt.Println("** ", b.Name, " done broadcasting")
 
 	}
 	return nil

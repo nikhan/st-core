@@ -22,6 +22,12 @@ func (s *Server) NewRouter() *mux.Router {
 			s.UpdateSocketHandler,
 		},
 		Route{
+			"DEBUG",
+			"/reset",
+			"GET",
+			s.ResetHandler,
+		},
+		Route{
 			"BlockLibrary",
 			"/blocks/library",
 			"GET",

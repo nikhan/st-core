@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/ioutil"
 	"net/http"
 	"strconv"
@@ -164,6 +165,26 @@ func (s *Server) CreateBlock(p ProtoBlock) (*BlockLedger, error) {
 	}
 
 	return m, nil
+}
+
+func (s *Server) ResetHandler(w http.ResponseWriter, r *http.Request) {
+	s.Lock()
+	defer s.Unlock()
+
+	for _, b := range s.blocks {
+		err := s.supervisor.Remove(b.Token)
+		fmt.Println(err)
+	}
+
+	for _, b := range s.blocks {
+		b.Block.Reset()
+	}
+
+	for _, b := range s.blocks {
+		s.blocks[b.Id].Token = s.supervisor.Add(b.Block)
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // CreateBlockHandler responds to a POST request to instantiate a new block and add it to the Server.
