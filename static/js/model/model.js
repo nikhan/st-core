@@ -264,6 +264,7 @@ var app = app || {};
             case 'info':
                 if (this.entities.hasOwnProperty(m.data.id)) {
                     this.entities[m.data.id].routes.forEach(function(r) {
+                        if (!r.hasOwnProperty('status')) return;
                         if (r.direction === 'input' && m.data.type === 'receive' && m.data.data === r.index) {
                             r.status.data = 'waiting';
                         }

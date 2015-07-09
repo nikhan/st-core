@@ -31,7 +31,12 @@ var app = app || {};
                 }, this.props.model.data.name)
             )
 
-            var waiting = this.props.model.status.data !== null ? ' ' + this.props.model.status.data : '';
+
+            var waiting = '';
+            if (this.props.model.hasOwnProperty('status')) {
+                waiting = this.props.model.status.data !== null ? ' ' + this.props.model.status.data : '';
+            }
+
             var circleClass = 'route_circle' + ' ' + this.props.model.data.type + waiting;
             var cx = this.props.geometry.routeRadius * (direction === 'input' ? -.5 : .5);
             var cy = this.props.geometry.routeRadius * -.5;
