@@ -33,7 +33,7 @@ var app = app || {};
 
 
             var waiting = '';
-            if (this.props.model.hasOwnProperty('status')) {
+            if (this.props.model.hasOwnProperty('status') && this.props.model.status !== undefined) {
                 waiting = this.props.model.status.data !== null ? ' ' + this.props.model.status.data : '';
             }
 
