@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"reflect"
 	"time"
 )
 
@@ -243,12 +244,58 @@ func (b *Block) Stop() {
 
 // wait and listen for all kernel inputs to be filled.
 func (b *Block) receive() Interrupt {
-	for id, input := range b.routing.Inputs {
-		b.Monitor <- MonitorMessage{
-			BI_RECEIVE,
-			id,
+	for {
+		// we use reflect.SelectCase so that we can receive on multiple channels
+		// in any order.
+		listen := []reflect.SelectCase{}
+
+		for id, input := range b.routing.Inputs {
+			//if we have already received a value on this input, skip.
+			if _, ok := b.state.inputValues[RouteIndex(id)]; ok {
+				continue
+			}
+
+			if input.Value != nil {
+				b.state.inputValues[RouteIndex(id)] = Copy(input.Value.Data)
+				continue
+			}
+
+			listen = append(listen, reflect.SelectCase{
+				Dir:  reflect.SelectRecv,
+				Chan: reflect.ValueOf(input.C),
+			})
 		}
 
+		// if all our inputs have been satisified, then we bail
+		if len(listen) == 0 {
+			return nil
+		}
+
+		// append the interrupt condition.
+		listen = append(listen, reflect.SelectCase{
+			Dir:  reflect.SelectRecv,
+			Chan: reflect.ValueOf(b.routing.InterruptChan),
+		})
+
+		index, value, ok := reflect.Select(listen)
+		if !ok {
+			panic("catastrophic failure in receive")
+		}
+
+		if index == len(listen)-1 {
+			return value.Interface().(Interrupt)
+		}
+
+		b.state.inputValues[RouteIndex(index)] = value.Interface()
+	}
+
+	//	quitChans := make([]chan struct{}, len(b.routing.Inputs), len(b.routing.Inputs))
+	/*quitChans := make(map[RouteIndex]chan struct{})
+	wg := sync.WaitGroup{}
+
+	var interrupt Interrupt
+
+	for id, input := range b.routing.Inputs {
 		//if we have already received a value on this input, skip.
 		if _, ok := b.state.inputValues[RouteIndex(id)]; ok {
 			continue
@@ -259,13 +306,34 @@ func (b *Block) receive() Interrupt {
 			continue
 		}
 
-		select {
-		case m := <-input.C:
-			b.state.inputValues[RouteIndex(id)] = m
-		case f := <-b.routing.InterruptChan:
-			return f
-		}
+		quitChans[RouteIndex(id)] = make(chan struct{})
+		wg.Add(1)
+		go func(input chan Message, id RouteIndex, quit chan struct{}) {
+			fmt.Println("RUNNING:", id)
+			select {
+			case m := <-input:
+				b.state.inputValues[id] = m
+			case i := <-b.routing.InterruptChan:
+				interrupt = i
+				for k, v := range quitChans {
+					if k != id {
+						fmt.Println("ASKING ", k, " TO QUIT! (I AM : ", id, ")")
+						v <- struct{}{}
+					}
+				}
+			case <-quit:
+				fmt.Println("I HAVE BEEN CALLED TO QUIT !", id)
+			}
+			fmt.Println("QUITTING:", id)
+			wg.Done()
+		}(input.C, RouteIndex(id), quitChans[RouteIndex(id)])
 	}
+
+	wg.Wait()
+	if interrupt != nil {
+		return interrupt
+	}*/
+
 	return nil
 }
 
@@ -322,29 +390,9 @@ func (b *Block) process() Interrupt {
 	return nil
 }
 
-func (b *Block) deliver(ensure bool) (bool, Interrupt) {
-	// tally how many deliveries that we need to make in total. due to the fact
-	// that the kernel _does not need_ to satisfy all outputs per crank, we need
-	// to check to see if there are any messages on a given output before adding
-	// it to the tally.
-	// TODO: this can be possibly further optimized
-	// - by caching the total connections
-	// - by moving both the len(manifest) validation and tallying to the
-	//   broadcast() func
-	// - possibly convert manifest to a simple count instead a map
-	total := 0
+// broadcast the kernel output to all connections on all outputs.
+func (b *Block) broadcast() Interrupt {
 	for id, out := range b.routing.Outputs {
-		if _, ok := b.state.outputValues[RouteIndex(id)]; ok {
-			total += len(out.Connections)
-		}
-	}
-
-	for id, out := range b.routing.Outputs {
-		b.Monitor <- MonitorMessage{
-			BI_BROADCAST,
-			id,
-		}
-
 		// if the output key is not present in the output map, then we
 		// don't deliver any message
 		_, ok := b.state.outputValues[RouteIndex(id)]
@@ -357,7 +405,7 @@ func (b *Block) deliver(ensure bool) (bool, Interrupt) {
 		if len(out.Connections) == 0 {
 			select {
 			case f := <-b.routing.InterruptChan:
-				return len(b.state.manifest) == total, f
+				return f
 			}
 		}
 		for c, _ := range out.Connections {
@@ -369,56 +417,16 @@ func (b *Block) deliver(ensure bool) (bool, Interrupt) {
 				continue
 			}
 
-			// ensure is a flag that toggles between a blocking send and a non-
-			// blocking send. in some circumstances, connections may get
-			// "tangled". When this happens, a connection may block the send
-			// for another connection on the same broadcast pin. This can
-			// happen when a single broadcast pin may attempt to deliver to two
-			// separate inputs on a single block. Because a block receives in
-			// order, the broadcasting pin may attempt to send to a pin that is
-			// not currently in a receive state. This results in eternal
-			// blocking.
-			if ensure {
-				select {
-				case c <- b.state.outputValues[RouteIndex(id)]:
-					// set that we have delivered the message.
-					b.state.manifest[m] = struct{}{}
-				case f := <-b.routing.InterruptChan:
-					return len(b.state.manifest) == total, f
-				}
-			} else {
-				select {
-				case c <- b.state.outputValues[RouteIndex(id)]:
-					// set that we have delivered the message.
-					b.state.manifest[m] = struct{}{}
-				default:
-				}
+			select {
+			case c <- b.state.outputValues[RouteIndex(id)]:
+				// set that we have delivered the message.
+				b.state.manifest[m] = struct{}{}
+			case f := <-b.routing.InterruptChan:
+				return f
 			}
 		}
-	}
-	return len(b.state.manifest) == total, nil
-}
 
-// broadcast the kernel output to all connections on all outputs.
-func (b *Block) broadcast() Interrupt {
-	// we attempt to deliver twice. the first with a non-blocking send, and
-	// secondly, a blocking send. If the non-blocking send fails at least once,
-	// we revert to a blocking send state.
-	done, i := b.deliver(false)
-	if i != nil {
-		return i
 	}
-	if done {
-		return nil
-	}
-	done, i = b.deliver(true)
-	if i != nil {
-		return i
-	}
-	if !done {
-		panic("cataclysmic error, we should never get here")
-	}
-
 	return nil
 }
 
