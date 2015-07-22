@@ -2,12 +2,12 @@ package core
 
 import (
 	"errors"
-	"reflect"
+	"fmt"
 	"time"
 )
 
 // NewBlock creates a new block from a spec
-func NewBlock(s Spec) *Block {
+func NewBlock(s Spec, id int) *Block {
 	var in []Input
 	var out []Output
 
@@ -29,6 +29,7 @@ func NewBlock(s Spec) *Block {
 	}
 
 	return &Block{
+		id: id,
 		state: BlockState{
 			make(MessageMap),
 			make(MessageMap),
@@ -50,15 +51,18 @@ func NewBlock(s Spec) *Block {
 
 // suture: the main routine the block runs
 func (b *Block) Serve() {
+	fmt.Println(b.id, " Hello")
 	for {
 		var interrupt Interrupt
 
 		b.routing.RLock()
 		for {
+			fmt.Println(b.id, " starting Receive!")
 			interrupt = b.receive()
 			if interrupt != nil {
 				break
 			}
+			fmt.Println(b.id, "ENDING receive!")
 
 			interrupt = b.process()
 			if interrupt != nil {
@@ -76,6 +80,7 @@ func (b *Block) Serve() {
 		b.routing.Lock()
 		if ok := interrupt(); !ok {
 			b.routing.Unlock()
+			fmt.Println(b.id, " GOODBYE!")
 			return
 		}
 		b.routing.Unlock()
@@ -127,6 +132,7 @@ func (b *Block) GetInputs() []Input {
 
 // RouteValue sets the route to always be the specified value
 func (b *Block) SetInput(id RouteIndex, v *InputValue) error {
+	fmt.Println(b.id, " DESITES SET VALUE ON PIN ", id, "WITH ", v)
 	returnVal := make(chan error, 1)
 	b.routing.InterruptChan <- func() bool {
 		if int(id) < 0 || int(id) >= len(b.routing.Inputs) {
@@ -135,7 +141,7 @@ func (b *Block) SetInput(id RouteIndex, v *InputValue) error {
 		}
 
 		b.routing.Inputs[id].Value = v
-
+		fmt.Println(b.id, " SET VALUE ON PIN ", id, "WITH ", v)
 		returnVal <- nil
 		return true
 	}
@@ -237,6 +243,7 @@ func (b *Block) Reset() {
 }
 
 func (b *Block) Stop() {
+	fmt.Println(b.id, " trying to stop")
 	b.routing.InterruptChan <- func() bool {
 		return false
 	}
@@ -244,7 +251,7 @@ func (b *Block) Stop() {
 
 // wait and listen for all kernel inputs to be filled.
 func (b *Block) receive() Interrupt {
-	for {
+	/*for {
 		// we use reflect.SelectCase so that we can receive on multiple channels
 		// in any order.
 		listen := []reflect.SelectCase{}
@@ -287,15 +294,17 @@ func (b *Block) receive() Interrupt {
 		}
 
 		b.state.inputValues[RouteIndex(index)] = value.Interface()
+	}*/
+
+	type listener struct {
+		input chan Message
+		quit  chan struct{}
+		index int
 	}
 
-	//	quitChans := make([]chan struct{}, len(b.routing.Inputs), len(b.routing.Inputs))
-	/*quitChans := make(map[RouteIndex]chan struct{})
-	wg := sync.WaitGroup{}
-
-	var interrupt Interrupt
-
+	listeners := []listener{}
 	for id, input := range b.routing.Inputs {
+		fmt.Println(b.id, " with ", id, input.Name)
 		//if we have already received a value on this input, skip.
 		if _, ok := b.state.inputValues[RouteIndex(id)]; ok {
 			continue
@@ -306,34 +315,46 @@ func (b *Block) receive() Interrupt {
 			continue
 		}
 
-		quitChans[RouteIndex(id)] = make(chan struct{})
-		wg.Add(1)
-		go func(input chan Message, id RouteIndex, quit chan struct{}) {
-			fmt.Println("RUNNING:", id)
-			select {
-			case m := <-input:
-				b.state.inputValues[id] = m
-			case i := <-b.routing.InterruptChan:
-				interrupt = i
-				for k, v := range quitChans {
-					if k != id {
-						fmt.Println("ASKING ", k, " TO QUIT! (I AM : ", id, ")")
-						v <- struct{}{}
-					}
-				}
-			case <-quit:
-				fmt.Println("I HAVE BEEN CALLED TO QUIT !", id)
-			}
-			fmt.Println("QUITTING:", id)
-			wg.Done()
-		}(input.C, RouteIndex(id), quitChans[RouteIndex(id)])
+		listeners = append(listeners, listener{
+			input: input.C,
+			quit:  make(chan struct{}),
+			index: id,
+		})
 	}
 
-	wg.Wait()
-	if interrupt != nil {
-		return interrupt
-	}*/
+	// if all our inputs have been satisified, then we bail
+	if len(listeners) == 0 {
+		return nil
+	}
 
+	check := make(chan struct{})
+	for _, v := range listeners {
+		go func(l listener) {
+			fmt.Println(b.id, " listening for ", l.index)
+			defer fmt.Println(b.id, " stopped listening", l.index)
+			select {
+			case m := <-l.input:
+				b.state.inputValues[RouteIndex(l.index)] = m
+				fmt.Println(b.id, "sending check")
+				check <- struct{}{}
+				fmt.Println(b.id, "sent")
+			case <-l.quit:
+			}
+		}(v)
+	}
+	total := len(listeners)
+	fmt.Println(b.id, " has ", total, " liseneters")
+	for {
+		select {
+		case i := <-b.routing.InterruptChan:
+			return i
+		case <-check:
+			total--
+			if total == 0 {
+				return nil
+			}
+		}
+	}
 	return nil
 }
 

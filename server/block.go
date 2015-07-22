@@ -137,7 +137,9 @@ func (s *Server) CreateBlock(p ProtoBlock) (*BlockLedger, error) {
 		return nil, errors.New("spec not found")
 	}
 
-	block := core.NewBlock(blockSpec)
+	nId := s.GetNextID()
+
+	block := core.NewBlock(blockSpec, nId)
 
 	m := &BlockLedger{
 		Label:        p.Label,
@@ -145,7 +147,7 @@ func (s *Server) CreateBlock(p ProtoBlock) (*BlockLedger, error) {
 		Type:         p.Type,
 		Block:        block,
 		Source:       blockSpec.Source,
-		Id:           s.GetNextID(),
+		Id:           nId,
 		MonitorQuit:  make(chan struct{}),
 		MonitorQuery: make(chan struct{}),
 	}

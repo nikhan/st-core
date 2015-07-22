@@ -230,6 +230,7 @@ type BlockRouting struct {
 
 // A Block describes the block's components
 type Block struct {
+	id         int
 	state      BlockState
 	routing    BlockRouting
 	kernel     Kernel
