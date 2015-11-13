@@ -105,7 +105,7 @@ var app = app || {};
         var routeRadius = Math.floor(routeHeight / 2.0);
 
         var padding = {
-            top: 0 + (this.data.hasOwnProperty('type') || !!this.data.label ? 20 : 0),
+            top: 0,
             bottom: 7,
             middle: 10,
             side: 3
@@ -121,9 +121,18 @@ var app = app || {};
             output: 0
         }
 
-        // TODO: add 'type' to group?
-        this.label = this.data.hasOwnProperty('type') ? this.data.type : '';
+        // this is terrible.
+        // if the node is a source, don't show the type
+        // if the node is a block, default to the type
+        // if the node is a source, group, or block, allow label to override type.
+        this.label = ''
+        if (!(this instanceof Group) && !(this instanceof Source)) {
+            this.label = this.data.type;
+        }
         this.label = !!this.data.label ? this.data.label : this.label;
+        if (this.label.length) {
+            padding.top += 20;
+        }
 
         var labelWidth = canvasMeasureText(this.label, 'Bold 14px helvetica').width;
 
