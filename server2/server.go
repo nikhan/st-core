@@ -8,6 +8,7 @@ import (
 )
 
 type ElementType int
+type ElementID string
 
 type Elements interface {
 	GetID()
@@ -15,10 +16,10 @@ type Elements interface {
 }
 
 type ID struct {
-	ID string `json:"id"`
+	ID ElementID `json:"id"`
 }
 
-func (id *ID) GetID() string {
+func (id *ID) GetID() ElementID {
 	return id.ID
 }
 
@@ -68,14 +69,14 @@ type Source struct {
 
 type Link struct {
 	Element
-	SourceID string `json:"source_id"`
-	TargetID string `json:"target_id"`
+	SourceID ElementID `json:"source_id"`
+	TargetID ElementID `json:"target_id"`
 }
 
 type Connection struct {
 	Element
-	SourceID string `json:"source_id"`
-	TargetID string `json:"target_id"`
+	SourceID ElementID `json:"source_id"`
+	TargetID ElementID `json:"target_id"`
 }
 
 type Route struct {
@@ -84,6 +85,44 @@ type Route struct {
 	Value     interface{} `json:"value"`
 	Direction string      `json:"direction"`
 	Source    string      `json:"source"`
+}
+
+type Graph struct {
+	sync.Mutex
+	elements map[string]Elements
+	Update   chan interface{}
+}
+
+func (g *Graph) AddElement(e Element) error {
+	return nil
+}
+
+func (g *Graph) GetElement(id ElementID) (*Element, error) {
+	return nil, nil
+}
+
+func (g *Graph) GetElementsState(id ElementID) error {
+	return nil
+}
+
+func (g *Graph) DeleteElement(id ElementID) error {
+	return nil
+}
+
+func (g *Graph) SetRouteValue(id ElementID) error {
+	return nil
+}
+
+func (g *Graph) SetElementLabel(id ElementID, label string) error {
+	return nil
+}
+
+func (g *Graph) SetElementPosition(id ElementID, pos Position) error {
+	return nil
+}
+
+func (g *Graph) SetGroupRouteHidden(id ElementID, hidden bool) error {
+	return nil
 }
 
 type Server struct {
@@ -193,6 +232,7 @@ func (s *Server) NewRouter() *mux.Router {
 			[]Handler{},
 		},
 	}
+	return mux.NewRouter()
 }
 
 func (s *Server) Serve() error {
