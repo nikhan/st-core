@@ -93,7 +93,13 @@ type Graph struct {
 	Update   chan interface{}
 }
 
-func (g *Graph) AddElement(e Element) error {
+func (g *Graph) createBlock(e Element) error      {}
+func (g *Graph) createGroup(e Element) error      {}
+func (g *Graph) createSource(e Element) error     {}
+func (g *Graph) createLink(e Element) error       {}
+func (g *Graph) createConnection(e Element) error {}
+
+func (g *Graph) CreateElement(e Element) error {
 	return nil
 }
 
