@@ -1,20 +1,14 @@
 package main
 
-import (
-	"encoding/json"
-	"io/ioutil"
-	"log"
-	"net/http"
-	"os"
-
-	"github.com/mitchellh/go-homedir"
-	"github.com/nytlabs/st-core/server"
-)
+import "github.com/nytlabs/st-core/server2"
 
 func main() {
 
+	s := &stserver.Server{}
+	s.Serve()
+
 	// Unpack settings file, or create a new one if necessary
-	var settings server.Settings
+	/*var settings server.Settings
 
 	dir, err := homedir.Dir()
 	if err != nil {
@@ -50,5 +44,5 @@ func main() {
 	err = http.ListenAndServe(":7071", nil)
 	if err != nil {
 		log.Panicf(err.Error())
-	}
+	}*/
 }
