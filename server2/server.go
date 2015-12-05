@@ -1,164 +1,179 @@
 package stserver
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
-	"sync"
+	"strconv"
 
+	"github.com/gorilla/context"
 	"github.com/gorilla/mux"
 )
 
-type ElementType int
-type ElementID string
-
-type Elements interface {
-	GetID()
-	GetType()
-}
-
-type ID struct {
-	ID ElementID `json:"id"`
-}
-
-func (id *ID) GetID() ElementID {
-	return id.ID
-}
-
-type Element struct {
-	ID
-	Type  ElementType `json:"type"`
-	Alias string      `json:"alias"`
-}
-
-func (e *Element) GetType() ElementType {
-	return e.Type
-}
-
-type Core struct {
-	Spec string `json:"spec"`
-}
-
-type Position struct {
-	X int `json:"x"`
-	Y int `json:"y"`
-}
-
-type Group struct {
-	Element
-	Position `json:"position"`
-	Routes   []struct {
-		ID
-		Hidden bool `json:"hidden"`
-		Label  bool `json:"label"`
-	} `json:"routes"`
-	Children []ID `json:"children"`
-}
-
-type Block struct {
-	Element
-	Core
-	Position `json:"position"`
-	Routes   []ID `json:"routes"`
-}
-
-type Source struct {
-	Element
-	Core
-	Position `json:"position"`
-	Routes   []ID `json:"routes"`
-}
-
-type Link struct {
-	Element
-	SourceID ElementID `json:"source_id"`
-	TargetID ElementID `json:"target_id"`
-}
-
-type Connection struct {
-	Element
-	SourceID ElementID `json:"source_id"`
-	TargetID ElementID `json:"target_id"`
-}
-
-type Route struct {
-	Element
-	Name      string      `json:"name"`
-	Value     interface{} `json:"value"`
-	Direction string      `json:"direction"`
-	Source    string      `json:"source"`
-}
-
-type Graph struct {
-	sync.Mutex
-	elements map[string]Elements
-	Update   chan interface{}
-}
-
-func (g *Graph) createBlock(e Element) error      {}
-func (g *Graph) createGroup(e Element) error      {}
-func (g *Graph) createSource(e Element) error     {}
-func (g *Graph) createLink(e Element) error       {}
-func (g *Graph) createConnection(e Element) error {}
-
-func (g *Graph) CreateElement(e Element) error {
-	return nil
-}
-
-func (g *Graph) GetElement(id ElementID) (*Element, error) {
-	return nil, nil
-}
-
-func (g *Graph) GetElementsState(id ElementID) error {
-	return nil
-}
-
-func (g *Graph) DeleteElement(id ElementID) error {
-	return nil
-}
-
-func (g *Graph) SetRouteValue(id ElementID) error {
-	return nil
-}
-
-func (g *Graph) SetElementLabel(id ElementID, label string) error {
-	return nil
-}
-
-func (g *Graph) SetElementPosition(id ElementID, pos Position) error {
-	return nil
-}
-
-func (g *Graph) SetGroupRouteHidden(id ElementID, hidden bool) error {
-	return nil
+func NewServer() *Server {
+	return &Server{
+		graph: &Graph{},
+	}
 }
 
 type Server struct {
-	sync.Mutex
-	graph map[string]Elements
+	graph *Graph
 }
 
-type Handler func(http.Handler) http.Handler
+func (s *Server) WebSocketHandler(w http.ResponseWriter, r *http.Request) {}
+func (s *Server) CreateElementHandler(w http.ResponseWriter, r *http.Request) {
+	element := context.Get(r, "body").(*CreateElement)
 
-type Endpoint struct {
-	Name        string
-	Pattern     string
-	Method      string
-	HandlerFunc http.HandlerFunc
-	Middle      []Handler
+	s.graph.Lock()
+	defer s.graph.Unlock()
+
+	err := s.graph.Add(element)
+
+	if err != nil {
+		panic(err)
+	}
 }
 
-func (s *Server) WebSocketHandler(w http.ResponseWriter, r *http.Request)           {}
-func (s *Server) CreateElementHandler(w http.ResponseWriter, r *http.Request)       {}
-func (s *Server) GetElementHandler(w http.ResponseWriter, r *http.Request)          {}
-func (s *Server) DeleteElementHandler(w http.ResponseWriter, r *http.Request)       {}
-func (s *Server) GetElementStateHandler(w http.ResponseWriter, r *http.Request)     {}
-func (s *Server) SetRouteValueHandler(w http.ResponseWriter, r *http.Request)       {}
-func (s *Server) SetElementLabelHandler(w http.ResponseWriter, r *http.Request)     {}
-func (s *Server) SetElementPositionHandler(w http.ResponseWriter, r *http.Request)  {}
-func (s *Server) BatchModifyElementsHandler(w http.ResponseWriter, r *http.Request) {}
-func (s *Server) SetGroupRouteHidden(w http.ResponseWriter, r *http.Request)        {}
-func (s *Server) SetGroupRouteAlias(w http.ResponseWriter, r *http.Request)         {}
+func (s *Server) GetElementHandler(w http.ResponseWriter, r *http.Request) {
+	id := context.Get(r, "id").(ElementID)
+
+	s.graph.Lock()
+	defer s.graph.Unlock()
+
+	element, err := s.graph.Get(id)
+
+	if err != nil {
+		panic(err)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(element)
+}
+
+func (s *Server) DeleteElementHandler(w http.ResponseWriter, r *http.Request) {
+	id := context.Get(r, "id").(ElementID)
+
+	s.graph.Lock()
+	defer s.graph.Unlock()
+
+	err := s.graph.Delete(id)
+
+	if err != nil {
+		panic(err)
+	}
+}
+func (s *Server) GetElementStateHandler(w http.ResponseWriter, r *http.Request) {
+	id := context.Get(r, "id").(ElementID)
+
+	s.graph.Lock()
+	defer s.graph.Unlock()
+
+	state, err := s.graph.GetState(id)
+
+	if err != nil {
+		panic(err)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(state)
+}
+func (s *Server) SetElementStateHandler(w http.ResponseWriter, r *http.Request) {
+	id := context.Get(r, "id").(ElementID)
+	state := struct{}{} // repalce with actual statehandler
+
+	s.graph.Lock()
+	defer s.graph.Unlock()
+
+	err := s.graph.SetState(id, state)
+
+	if err != nil {
+		panic(err)
+	}
+}
+func (s *Server) UpdateElementHandler(w http.ResponseWriter, r *http.Request) {
+	id := context.Get(r, "id").(ElementID)
+	update := context.Get(r, "body").(*UpdateElement)
+
+	s.graph.Lock()
+	defer s.graph.Unlock()
+
+	err := s.graph.Update(id, update)
+
+	if err != nil {
+		panic(err)
+	}
+}
+func (s *Server) UpdateElementsHandler(w http.ResponseWriter, r *http.Request) {
+	ids := context.Get(r, "body").(*BatchElement)
+	action := r.URL.Query().Get("action")
+
+	s.graph.Lock()
+	defer s.graph.Unlock()
+
+	var err error
+	switch action {
+	case "translate":
+		xs := r.URL.Query().Get("x")
+		ys := r.URL.Query().Get("y")
+		// need error checking
+
+		x, err := strconv.Atoi(xs)
+		if err != nil {
+			panic(err)
+		}
+
+		y, err := strconv.Atoi(ys)
+		if err != nil {
+			panic(err)
+		}
+
+		err = s.graph.BatchTranslate(ids, x, y)
+	case "move":
+		parent := ElementID(r.URL.Query().Get("parent"))
+		// need error checking
+
+		err = s.graph.BatchMove(ids, parent)
+	case "delete":
+		err = s.graph.BatchDelete(ids)
+	default:
+		err = errors.New(fmt.Sprintf("unknown action: %s", action))
+	}
+
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (s *Server) UpdateGroupRouteHandler(w http.ResponseWriter, r *http.Request) {
+	id := context.Get(r, "id").(ElementID)
+	routeID := context.Get(r, "routeID").(ElementID)
+
+	update := context.Get(r, "body").(*UpdateElement)
+
+	s.graph.Lock()
+	defer s.graph.Unlock()
+
+	err := s.graph.UpdateGroupRoute(id, routeID, update)
+
+	if err != nil {
+		panic(err)
+	}
+}
+
+func (s *Server) ExportHandler(w http.ResponseWriter, r *http.Request) {}
 
 func (s *Server) NewRouter() *mux.Router {
+	type Handler func(http.Handler) http.Handler
+
+	type Endpoint struct {
+		Name        string
+		Pattern     string
+		Method      string
+		HandlerFunc http.HandlerFunc
+		Middle      []Handler
+	}
+
 	routes := []Endpoint{
 		Endpoint{
 			"WebSocket",
@@ -172,76 +187,84 @@ func (s *Server) NewRouter() *mux.Router {
 			"/pattern",
 			"POST",
 			s.CreateElementHandler,
-			[]Handler{},
+			[]Handler{RecoverHandler, CreateHandler},
 		},
 		Endpoint{
 			"GetElement",
 			"/pattern/{id}",
 			"GET",
 			s.GetElementHandler,
-			[]Handler{},
+			[]Handler{RecoverHandler, IdHandler},
 		},
 		Endpoint{
 			"DeleteElement",
 			"/pattern/{id}",
 			"DELETE",
 			s.DeleteElementHandler,
-			[]Handler{},
+			[]Handler{RecoverHandler, IdHandler},
 		},
 		Endpoint{
 			"GetElementState",
 			"/pattern/{id}/state",
 			"GET",
 			s.GetElementStateHandler,
-			[]Handler{},
+			[]Handler{RecoverHandler, IdHandler},
 		},
 		Endpoint{
-			"SetElementValue",
-			"/pattern/{id}/value",
+			"GetElementState",
+			"/pattern/{id}/state",
 			"PUT",
-			s.SetRouteValueHandler,
-			[]Handler{},
+			s.SetElementStateHandler,
+			[]Handler{RecoverHandler, IdHandler},
 		},
 		Endpoint{
-			"SetElementLabel",
-			"/pattern/{id}/label",
+			"UpdateElement",
+			"/pattern/{id}",
 			"PUT",
-			s.SetElementLabelHandler,
-			[]Handler{},
+			s.UpdateElementHandler,
+			[]Handler{RecoverHandler, IdHandler, UpdateHandler},
 		},
 		Endpoint{
-			"SetElementPosition",
-			"/pattern/{id}/position",
-			"PUT",
-			s.SetElementPositionHandler,
-			[]Handler{},
-		},
-		Endpoint{
-			"BatchModifyElements",
+			"UpdateElements",
 			"/pattern/",
 			"PUT",
-			s.BatchModifyElementsHandler,
-			[]Handler{},
+			s.UpdateElementsHandler,
+			[]Handler{RecoverHandler, BatchHandler},
 		},
 		Endpoint{
-			"SetGroupRouteHidden",
-			"/pattern/{id}/route/{routeID}/hidden",
-			"PUT",
-			s.SetGroupRouteHidden,
-			[]Handler{},
+			"ExportElements",
+			"/pattern/",
+			"GET",
+			s.ExportHandler,
+			[]Handler{RecoverHandler},
 		},
 		Endpoint{
-			"SetGroupRouteAlias",
-			"/pattern/{id}/route/{routeID}/alias",
+			"UpdateGroupRoute",
+			"/pattern/{id}/route/{routeID}",
 			"PUT",
-			s.SetGroupRouteAlias,
-			[]Handler{},
+			s.UpdateGroupRouteHandler,
+			[]Handler{RecoverHandler, IdHandler, RouteIdHandler, UpdateHandler},
 		},
 	}
-	return mux.NewRouter()
-}
 
-func (s *Server) Serve() error {
+	router := mux.NewRouter()
 
-	return nil
+	for _, route := range routes {
+		var handle http.Handler
+		handle = route.HandlerFunc
+
+		for _, h := range route.Middle {
+			handle = h(handle)
+		}
+
+		handler := Logger(handle, route.Name)
+
+		router.
+			Methods(route.Method).
+			Path(route.Pattern).
+			Name(route.Name).
+			Handler(handler)
+	}
+
+	return router
 }
