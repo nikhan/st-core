@@ -108,7 +108,6 @@ type CreateElement struct {
 	Children []*ID      `json:"children"`
 	SourceID *ElementID `json:"source_id"`
 	TargetID *ElementID `json:"target_id"`
-	Parent   *ElementID `json:"parent_id"`
 }
 
 type UpdateElement struct {

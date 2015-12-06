@@ -19,7 +19,7 @@ type Graph struct {
 	Changes  chan interface{}
 }
 
-func (g *Graph) Add(e *CreateElement) error {
+func (g *Graph) Add(e *CreateElement, parent *ElementID) error {
 	var err error
 
 	if e.Type == nil {
@@ -98,5 +98,9 @@ func (g *Graph) BatchMove(ids *BatchElement, parent ElementID) error {
 }
 
 func (g *Graph) BatchDelete(ids *BatchElement) error {
+	return nil
+}
+
+func (g *Graph) BatchReset(ids *BatchElement) error {
 	return nil
 }
