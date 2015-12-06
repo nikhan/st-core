@@ -1,5 +1,13 @@
 package stserver
 
+const (
+	BLOCK      = "block"
+	GROUP      = "group"
+	SOURCE     = "source"
+	CONNECTION = "connection"
+	LINK       = "link"
+)
+
 type ElementType string
 type ElementID string
 

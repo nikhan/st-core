@@ -2,14 +2,6 @@ package stserver
 
 import "sync"
 
-const (
-	BLOCK      = "block"
-	GROUP      = "group"
-	SOURCE     = "source"
-	CONNECTION = "connection"
-	LINK       = "link"
-)
-
 type Graph struct {
 	sync.Mutex
 	elements map[string]Elements
@@ -62,7 +54,7 @@ func (g *Graph) Add(e []CreateElement, parent *ElementID) error {
 	return err
 }
 
-func (g *Graph) Get(id ElementID) (*Element, error) {
+func (g *Graph) Get(ids ...ElementID) (*Element, error) {
 	return nil, nil
 }
 
@@ -90,18 +82,18 @@ func (g *Graph) UpdateGroupRoute(id ElementID, routeID ElementID, update *Update
 	return nil
 }
 
-func (g *Graph) BatchTranslate(ids []ID, xOffset int, yOffset int) error {
+func (g *Graph) BatchTranslate(ids []ElementID, xOffset int, yOffset int) error {
 	return nil
 }
 
-func (g *Graph) BatchMove(ids []ID, parent ElementID) error {
+func (g *Graph) BatchMove(ids []ElementID, parent ElementID) error {
 	return nil
 }
 
-func (g *Graph) BatchDelete(ids []ID) error {
+func (g *Graph) BatchDelete(ids []ElementID) error {
 	return nil
 }
 
-func (g *Graph) BatchReset(ids []ID) error {
+func (g *Graph) BatchReset(ids []ElementID) error {
 	return nil
 }
