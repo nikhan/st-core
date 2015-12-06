@@ -70,14 +70,6 @@ func (g *Graph) Update(id ElementID, update *UpdateElement) error {
 	return nil
 }
 
-func (g *Graph) Delete(id ElementID) error {
-	return nil
-}
-
-func (g *Graph) DeleteRecursive(id ElementID) error {
-	return nil
-}
-
 func (g *Graph) UpdateGroupRoute(id ElementID, routeID ElementID, update *UpdateElement) error {
 	return nil
 }
@@ -86,7 +78,7 @@ func (g *Graph) BatchTranslate(ids []ElementID, xOffset int, yOffset int) error 
 	return nil
 }
 
-func (g *Graph) BatchMove(ids []ElementID, parent ElementID) error {
+func (g *Graph) BatchUngroup(ids []ElementID) error {
 	return nil
 }
 
