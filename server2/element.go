@@ -116,5 +116,3 @@ type UpdateElement struct {
 	Value    interface{} `json:"value"`
 	Hidden   *bool       `json:"hidden"`
 }
-
-type BatchElement []ID

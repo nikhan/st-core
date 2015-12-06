@@ -1,9 +1,6 @@
 package stserver
 
-import (
-	"errors"
-	"sync"
-)
+import "sync"
 
 const (
 	BLOCK      = "block"
@@ -19,12 +16,12 @@ type Graph struct {
 	Changes  chan interface{}
 }
 
-func (g *Graph) Add(e *CreateElement, parent *ElementID) error {
+func (g *Graph) Add(e []CreateElement, parent *ElementID) error {
 	var err error
 
-	if e.Type == nil {
-		return errors.New("cannot create element: no type")
-	}
+	//if e.Type == nil {
+	//	return errors.New("cannot create element: no type")
+	//}
 
 	/*switch *e.Type {
 	case BLOCK:
@@ -85,22 +82,26 @@ func (g *Graph) Delete(id ElementID) error {
 	return nil
 }
 
+func (g *Graph) DeleteRecursive(id ElementID) error {
+	return nil
+}
+
 func (g *Graph) UpdateGroupRoute(id ElementID, routeID ElementID, update *UpdateElement) error {
 	return nil
 }
 
-func (g *Graph) BatchTranslate(ids *BatchElement, xOffset int, yOffset int) error {
+func (g *Graph) BatchTranslate(ids []ID, xOffset int, yOffset int) error {
 	return nil
 }
 
-func (g *Graph) BatchMove(ids *BatchElement, parent ElementID) error {
+func (g *Graph) BatchMove(ids []ID, parent ElementID) error {
 	return nil
 }
 
-func (g *Graph) BatchDelete(ids *BatchElement) error {
+func (g *Graph) BatchDelete(ids []ID) error {
 	return nil
 }
 
-func (g *Graph) BatchReset(ids *BatchElement) error {
+func (g *Graph) BatchReset(ids []ID) error {
 	return nil
 }

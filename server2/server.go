@@ -21,8 +21,8 @@ type Server struct {
 }
 
 func (s *Server) WebSocketHandler(w http.ResponseWriter, r *http.Request) {}
-func (s *Server) CreateElementHandler(w http.ResponseWriter, r *http.Request) {
-	element := context.Get(r, "body").(*CreateElement)
+func (s *Server) CreateElementsHandler(w http.ResponseWriter, r *http.Request) {
+	element := context.Get(r, "body").([]CreateElement)
 
 	s.graph.Lock()
 	defer s.graph.Unlock()
@@ -32,8 +32,8 @@ func (s *Server) CreateElementHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s *Server) ParentCreateElementHandler(w http.ResponseWriter, r *http.Request) {
-	element := context.Get(r, "body").(*CreateElement)
+func (s *Server) ParentCreateElementsHandler(w http.ResponseWriter, r *http.Request) {
+	element := context.Get(r, "body").([]CreateElement)
 	id := context.Get(r, "id").(ElementID)
 
 	s.graph.Lock()
@@ -70,6 +70,18 @@ func (s *Server) DeleteElementHandler(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 }
+
+func (s *Server) DeleteRecursiveElementHandler(w http.ResponseWriter, r *http.Request) {
+	id := context.Get(r, "id").(ElementID)
+
+	s.graph.Lock()
+	defer s.graph.Unlock()
+
+	if err := s.graph.DeleteRecursive(id); err != nil {
+		panic(err)
+	}
+}
+
 func (s *Server) GetElementStateHandler(w http.ResponseWriter, r *http.Request) {
 	id := context.Get(r, "id").(ElementID)
 
@@ -125,18 +137,6 @@ func (s *Server) UpdateGroupRouteHandler(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-func (s *Server) RootExportJSONHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Root/export")
-}
-func (s *Server) RootImportJSONHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("Root/import")
-}
-func (s *Server) ParentExportJSONHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("parent/export")
-}
-func (s *Server) ParentImportJSONHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("parent/import")
-}
 func (s *Server) RootExportGistHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("Root/export")
 }
@@ -149,9 +149,12 @@ func (s *Server) ParentExportGistHandler(w http.ResponseWriter, r *http.Request)
 func (s *Server) ParentImportGistHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("parent/import")
 }
+func (s *Server) LibraryHandler(w http.ResponseWriter, r *http.Request) {
+	fmt.Println("library")
+}
 
 func (s *Server) TranslateElementsHandler(w http.ResponseWriter, r *http.Request) {
-	ids := context.Get(r, "body").(*BatchElement)
+	ids := context.Get(r, "body").([]ID)
 
 	s.graph.Lock()
 	defer s.graph.Unlock()
@@ -176,7 +179,7 @@ func (s *Server) TranslateElementsHandler(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) DeleteElementsHandler(w http.ResponseWriter, r *http.Request) {
-	ids := context.Get(r, "body").(*BatchElement)
+	ids := context.Get(r, "body").([]ID)
 
 	s.graph.Lock()
 	defer s.graph.Unlock()
@@ -187,7 +190,7 @@ func (s *Server) DeleteElementsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) ResetElementsHandler(w http.ResponseWriter, r *http.Request) {
-	ids := context.Get(r, "body").(*BatchElement)
+	ids := context.Get(r, "body").([]ID)
 
 	s.graph.Lock()
 	defer s.graph.Unlock()
@@ -198,7 +201,7 @@ func (s *Server) ResetElementsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) MoveElementsHandler(w http.ResponseWriter, r *http.Request) {
-	ids := context.Get(r, "body").(*BatchElement)
+	ids := context.Get(r, "body").([]ID)
 
 	s.graph.Lock()
 	defer s.graph.Unlock()
@@ -233,83 +236,59 @@ func (s *Server) NewRouter() *mux.Router {
 			[]Handler{},
 		},
 		Endpoint{
-			"RootImport",
-			"/pattern",
-			"POST",
-			[]string{"action", "import", "type", "json"},
-			s.RootImportJSONHandler,
-			[]Handler{RecoverHandler},
-		},
-		Endpoint{
-			"RootExport",
-			"/pattern",
+			"library",
+			"/library",
 			"GET",
-			[]string{"action", "export", "type", "json"},
-			s.RootExportJSONHandler,
-			[]Handler{RecoverHandler},
+			[]string{},
+			s.LibraryHandler,
+			[]Handler{},
 		},
 		Endpoint{
-			"RootImport",
+			"RootImportGist",
 			"/pattern",
 			"POST",
-			[]string{"action", "import", "type", "gist"},
+			[]string{"action", "gist"},
 			s.RootImportGistHandler,
 			[]Handler{RecoverHandler},
 		},
 		Endpoint{
-			"RootExport",
+			"RootExportGist",
 			"/pattern",
 			"GET",
-			[]string{"action", "export", "type", "gist"},
+			[]string{"action", "gist"},
 			s.RootExportGistHandler,
 			[]Handler{RecoverHandler},
 		},
 		Endpoint{
-			"CreateElement",
+			"CreateElements",
 			"/pattern",
 			"POST",
 			[]string{},
-			s.CreateElementHandler,
+			s.CreateElementsHandler,
 			[]Handler{RecoverHandler, CreateHandler},
 		},
 		Endpoint{
-			"Import",
+			"ParentImportGist",
 			"/pattern/{id}",
 			"POST",
-			[]string{"action", "import", "type", "json"},
-			s.ParentImportJSONHandler,
-			[]Handler{RecoverHandler},
-		},
-		Endpoint{
-			"Export",
-			"/pattern/{id}",
-			"GET",
-			[]string{"action", "export", "type", "json"},
-			s.ParentExportJSONHandler,
-			[]Handler{RecoverHandler},
-		},
-		Endpoint{
-			"Import",
-			"/pattern/{id}",
-			"POST",
-			[]string{"action", "import", "type", "gist"},
+			[]string{"action", "gist"},
 			s.ParentImportGistHandler,
 			[]Handler{RecoverHandler},
 		},
 		Endpoint{
-			"Export",
+			"ParentExportGist",
 			"/pattern/{id}",
 			"GET",
-			[]string{"action", "export", "type", "gist"},
+			[]string{"action", "gist"},
 			s.ParentExportGistHandler,
 			[]Handler{RecoverHandler},
 		},
 		Endpoint{
-			"CreateElement",
+			"CreateElements",
 			"/pattern/{id}",
 			"POST",
 			[]string{},
-			s.ParentCreateElementHandler,
+			s.ParentCreateElementsHandler,
 			[]Handler{RecoverHandler, CreateHandler},
 		},
 		Endpoint{
@@ -318,6 +297,14 @@ func (s *Server) NewRouter() *mux.Router {
 			"GET",
 			[]string{},
 			s.GetElementHandler,
+			[]Handler{RecoverHandler, IdHandler},
+		},
+		Endpoint{
+			"DeleteRecursiveElement",
+			"/pattern/{id}",
+			"DELETE",
+			[]string{"action", "recursive"},
+			s.DeleteRecursiveElementHandler,
 			[]Handler{RecoverHandler, IdHandler},
 		},
 		Endpoint{
