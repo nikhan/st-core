@@ -44,22 +44,6 @@ func (s *Server) ParentCreateElementsHandler(w http.ResponseWriter, r *http.Requ
 	}
 }
 
-func (s *Server) GetElementsHandler(w http.ResponseWriter, r *http.Request) {
-	ids := context.Get(r, "body").([]ElementID)
-
-	s.graph.Lock()
-	defer s.graph.Unlock()
-
-	element, err := s.graph.Get(ids...)
-
-	if err != nil {
-		panic(err)
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(element)
-}
-
 func (s *Server) RootGetElementsHandler(w http.ResponseWriter, r *http.Request) {
 	s.graph.Lock()
 	defer s.graph.Unlock()
@@ -81,6 +65,22 @@ func (s *Server) GetElementHandler(w http.ResponseWriter, r *http.Request) {
 	defer s.graph.Unlock()
 
 	element, err := s.graph.Get(id)
+
+	if err != nil {
+		panic(err)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(element)
+}
+
+func (s *Server) GetElementsHandler(w http.ResponseWriter, r *http.Request) {
+	ids := context.Get(r, "body").([]ElementID)
+
+	s.graph.Lock()
+	defer s.graph.Unlock()
+
+	element, err := s.graph.Get(ids...)
 
 	if err != nil {
 		panic(err)
@@ -134,7 +134,6 @@ func (s *Server) UpdateElementHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) UpdateGroupRouteHandler(w http.ResponseWriter, r *http.Request) {
 	id := context.Get(r, "id").(ElementID)
 	routeID := context.Get(r, "routeID").(ElementID)
-
 	update := context.Get(r, "body").(*UpdateElement)
 
 	s.graph.Lock()
@@ -202,10 +201,7 @@ func (s *Server) UngroupElementsHandler(w http.ResponseWriter, r *http.Request) 
 	s.graph.Lock()
 	defer s.graph.Unlock()
 
-	parent := ElementID(r.URL.Query().Get("parent"))
-	// need error checking
-
-	if err := s.graph.BatchMove(ids, parent); err != nil {
+	if err := s.graph.BatchUngroup(ids); err != nil {
 		panic(err)
 	}
 }
