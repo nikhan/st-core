@@ -241,7 +241,7 @@ func (s *Server) NewRouter() *mux.Router {
 			"GET",
 			[]string{},
 			s.RootGetElementsHandler,
-			[]Handler{RecoverHandler, CreateHandler},
+			[]Handler{RecoverHandler},
 		},
 		Endpoint{
 			"CreateElements",
