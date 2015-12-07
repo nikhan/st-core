@@ -6,26 +6,22 @@ const (
 	SOURCE     = "source"
 	CONNECTION = "connection"
 	LINK       = "link"
+	ROUTE      = "route"
 )
 
 type ElementType string
 type ElementID string
 
 type Elements interface {
-	GetID()
 	GetType()
 }
 
-type ID struct {
+type Ident struct {
 	ID ElementID `json:"id"`
 }
 
-func (id *ID) GetID() ElementID {
-	return id.ID
-}
-
 type Element struct {
-	ID
+	Ident
 	Type  ElementType `json:"type"`
 	Alias string      `json:"alias"`
 }
@@ -60,11 +56,11 @@ type Group struct {
 	Node
 	Position `json:"position"`
 	Routes   []struct {
-		ID
+		Ident
 		Hidden bool   `json:"hidden"`
 		Alias  string `json:"alias"`
 	} `json:"routes"`
-	Children []*ID `json:"children"`
+	Children []Ident `json:"children"`
 }
 
 type Block struct {
@@ -72,7 +68,7 @@ type Block struct {
 	Spec
 	Node
 	Position `json:"position"`
-	Routes   []ID `json:"routes"`
+	Routes   []Ident `json:"routes"`
 }
 
 type Source struct {
@@ -80,7 +76,7 @@ type Source struct {
 	Spec
 	Node
 	Position `json:"position"`
-	Routes   []ID `json:"routes"`
+	Routes   []Ident `json:"routes"`
 }
 
 type Link struct {
@@ -104,16 +100,19 @@ type Route struct {
 }
 
 type CreateElement struct {
-	Type     *string   `json:"type"`
-	Spec     *string   `json:"spec"`
-	Alias    *string   `json:"alias"`
-	Position *Position `json:"position"`
+	ID       *ElementID `json:"id"`
+	Type     *string    `json:"type"`
+	Spec     *string    `json:"spec"`
+	Alias    *string    `json:"alias"`
+	Position *Position  `json:"position"`
 	Routes   []struct {
-		ID
-		Hidden *bool   `json:"hidden"`
-		Alias  *string `json:"alias"`
+		ID     *ElementID `json:"id"`
+		Hidden *bool      `json:"hidden"`
+		Alias  *string    `json:"alias"`
 	} `json:"routes"`
-	Children []*ID      `json:"children"`
+	Children []struct {
+		ID *ElementID `json:"id"`
+	} `json:"children"`
 	SourceID *ElementID `json:"source_id"`
 	TargetID *ElementID `json:"target_id"`
 }

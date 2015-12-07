@@ -22,24 +22,24 @@ type Server struct {
 
 func (s *Server) WebSocketHandler(w http.ResponseWriter, r *http.Request) {}
 func (s *Server) CreateElementsHandler(w http.ResponseWriter, r *http.Request) {
-	element := context.Get(r, "body").([]CreateElement)
+	elements := context.Get(r, "body").(*[]*CreateElement)
 
 	s.graph.Lock()
 	defer s.graph.Unlock()
 
-	if err := s.graph.Add(element, nil); err != nil {
+	if err := s.graph.Add(*elements, nil); err != nil {
 		panic(err)
 	}
 }
 
 func (s *Server) ParentCreateElementsHandler(w http.ResponseWriter, r *http.Request) {
-	element := context.Get(r, "body").([]CreateElement)
+	elements := context.Get(r, "body").(*[]*CreateElement)
 	id := context.Get(r, "id").(ElementID)
 
 	s.graph.Lock()
 	defer s.graph.Unlock()
 
-	if err := s.graph.Add(element, &id); err != nil {
+	if err := s.graph.Add(*elements, &id); err != nil {
 		panic(err)
 	}
 }
