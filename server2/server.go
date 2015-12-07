@@ -12,7 +12,7 @@ import (
 
 func NewServer() *Server {
 	return &Server{
-		graph: &Graph{},
+		graph: NewGraph(),
 	}
 }
 
@@ -105,6 +105,7 @@ func (s *Server) GetElementStateHandler(w http.ResponseWriter, r *http.Request) 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(state)
 }
+
 func (s *Server) SetElementStateHandler(w http.ResponseWriter, r *http.Request) {
 	id := context.Get(r, "id").(ElementID)
 	state := struct{}{} // repalce with actual statehandler

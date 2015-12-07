@@ -11,39 +11,24 @@ const (
 
 type ElementType string
 type ElementID string
+type Spec string
 
 type Elements interface {
 	GetType()
 }
 
-type Ident struct {
-	ID ElementID `json:"id"`
-}
-
 type Element struct {
-	Ident
+	ID    ElementID   `json:"id"`
 	Type  ElementType `json:"type"`
 	Alias string      `json:"alias"`
-}
-
-type Node struct {
-	Parent *Group `json:"-"`
-}
-
-func (n *Node) GetParent() *Group {
-	return n.Parent
-}
-
-func (n *Node) SetParent(g *Group) {
-	n.Parent = g
 }
 
 func (e *Element) GetType() ElementType {
 	return e.Type
 }
 
-type Spec struct {
-	Spec string `json:"spec"`
+func (e *Element) GetID() ElementID {
+	return e.ID
 }
 
 type Position struct {
@@ -53,30 +38,27 @@ type Position struct {
 
 type Group struct {
 	Element
-	Node
 	Position `json:"position"`
 	Routes   []struct {
-		Ident
+		ElementID
 		Hidden bool   `json:"hidden"`
 		Alias  string `json:"alias"`
 	} `json:"routes"`
-	Children []Ident `json:"children"`
+	Children []ElementID `json:"children"`
 }
 
 type Block struct {
 	Element
-	Spec
-	Node
+	Spec     `json:"spec"`
 	Position `json:"position"`
-	Routes   []Ident `json:"routes"`
+	Routes   []ElementID `json:"routes"`
 }
 
 type Source struct {
 	Element
-	Spec
-	Node
+	Spec     `json:"spec"`
 	Position `json:"position"`
-	Routes   []Ident `json:"routes"`
+	Routes   []ElementID `json:"routes"`
 }
 
 type Link struct {

@@ -9,17 +9,44 @@ import (
 
 type Graph struct {
 	sync.Mutex
-	elements map[ElementID]Elements
-	Changes  chan interface{}
-	index    int64
+	elements      map[ElementID]Elements
+	elementParent map[ElementID]ElementID
+	Changes       chan interface{}
+	index         int64
 }
 
-func (g *Graph) getID() ElementID {
+func NewGraph() *Graph {
+	return &Graph{
+		elements:      make(map[ElementID]Elements),
+		elementParent: make(map[ElementID]ElementID),
+		Changes:       make(chan interface{}),
+		index:         0,
+	}
+}
+
+func (g *Graph) generateID() ElementID {
 	g.index += 1
 	return ElementID(strconv.FormatInt(g.index, 10))
 }
 
 func (g *Graph) addBlock(e *CreateElement) error {
+	b := &Block{
+		Element{
+			ID: ElementID(*e.ID),
+		},
+		Spec: Spec(*e.Spec),
+	}
+
+	g.elements[b.ID] = b
+
+	/*if e.Position != nil {
+		block.SetPosition(*e.Position)
+	}
+
+	if e.Alias != nil {
+		block.SetAlias(*e.Alias)
+	}*/
+
 	return nil
 }
 func (g *Graph) addGroup(e *CreateElement) error {
@@ -46,10 +73,10 @@ func (g *Graph) Add(elements []*CreateElement, parent *ElementID) error {
 	for _, element := range elements {
 		var id ElementID
 		if element.ID == nil {
-			id = g.getID()
+			id = g.generateID()
 		} else {
 			if _, ok := g.elements[*element.ID]; ok {
-				id = g.getID()
+				id = g.generateID()
 				oldIDs[*element.ID] = &id
 			} else {
 				id = *element.ID
@@ -159,8 +186,16 @@ func (g *Graph) Add(elements []*CreateElement, parent *ElementID) error {
 	return nil
 }
 
-func (g *Graph) Get(ids ...ElementID) (*Element, error) {
-	return nil, nil
+func (g *Graph) Get(ids ...ElementID) ([]*Elements, error) {
+	elements := []*Elements{}
+
+	if len(ids) == 0 {
+		for _, e := range g.elements {
+			elements = append(elements, &e)
+		}
+	}
+
+	return elements, nil
 }
 
 func (g *Graph) SetState(id ElementID, state interface{}) error {
