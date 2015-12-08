@@ -31,7 +31,7 @@ func (g *Graph) generateID() ElementID {
 
 func (g *Graph) addBlock(e *CreateElement) error {
 	b := &Block{
-		Element{
+		Element: Element{
 			ID: ElementID(*e.ID),
 		},
 		Spec: Spec(*e.Spec),

@@ -44,21 +44,27 @@ type Group struct {
 		Hidden bool   `json:"hidden"`
 		Alias  string `json:"alias"`
 	} `json:"routes"`
-	Children []ElementID `json:"children"`
+	Children []struct {
+		ID ElementID `json:"id"`
+	} `json:"children"`
 }
 
 type Block struct {
 	Element
 	Spec     `json:"spec"`
 	Position `json:"position"`
-	Routes   []ElementID `json:"routes"`
+	Routes   []struct {
+		ID ElementID `json:"id"`
+	} `json:"routes"`
 }
 
 type Source struct {
 	Element
 	Spec     `json:"spec"`
 	Position `json:"position"`
-	Routes   []ElementID `json:"routes"`
+	Routes   []struct {
+		ID ElementID `json:"id"`
+	} `json:"routes"`
 }
 
 type Link struct {
