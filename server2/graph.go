@@ -31,13 +31,31 @@ func (g *Graph) generateID() ElementID {
 
 func (g *Graph) addBlock(e *CreateElement) error {
 	b := &Block{
-		Element: Element{
-			ID: ElementID(*e.ID),
-		},
-		Spec: Spec(*e.Spec),
+		Element: Element{},
 	}
 
-	g.elements[b.ID] = b
+	if e.Spec == nil {
+		return errors.New("block has no spec!")
+	}
+
+	b.Spec = Spec(*e.Spec)
+
+	if *e.Position == nil {
+		b.Position = Position{
+			x: 0,
+			y: 0,
+		}
+	} else {
+		b.Position = &e.Position
+	}
+
+	if *e.Position.Routes == nil {
+		fmt.Println("wjp carws!")
+	} else {
+		b.Routes = &e.Routes
+	}
+
+	g.elements[*e.ID] = b
 
 	/*if e.Position != nil {
 		block.SetPosition(*e.Position)
@@ -136,52 +154,17 @@ func (g *Graph) Add(elements []*CreateElement, parent *ElementID) error {
 			err = errors.New(fmt.Sprintf("unable to import unknown type %s", *element.Type))
 		}
 
+		g.elements[*element.ID].Element.ID = *element.ID
+		g.elements[*element.ID].Element.Type = *element.Type
+
+		if *element.Alias != nil {
+			g.elements[*element.ID].Element.Alias = *element.Alias
+		}
+
 		if err != nil {
 			return err
 		}
 	}
-
-	//	idUpdate := make(map[ElementID]ElementID)
-
-	//if e.Type == nil {
-	//	return errors.New("cannot create element: no type")
-	//}
-
-	/*switch *e.Type {
-	case BLOCK:
-		_ = &Block{
-			Spec:     e.Spec,
-			Alias:    e.Alias,
-			Position: e.Position,
-		}
-	case SOURCE:
-		_ = &Source{
-			Spec:     e.Spec,
-			Alias:    e.Alias,
-			Position: e.Position,
-		}
-	case GROUP:
-		_ = &Group{
-			Alias:    e.Alias,
-			Position: e.Position,
-			Children: e.Children,
-			Routes:   e.Routes,
-		}
-	case CONNECTION:
-		_ = &Connection{
-			Alias:    e.Alias,
-			SourceID: e.SourceID,
-			TargetID: e.TargetID,
-		}
-	case LINK:
-		_ = &Link{
-			Alias:    e.Alias,
-			SourceID: e.SourceID,
-			TargetID: e.TargetID,
-		}
-	default:
-
-	}*/
 
 	return nil
 }

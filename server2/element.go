@@ -14,7 +14,8 @@ type ElementID string
 type Spec string
 
 type Elements interface {
-	GetType()
+	GetType() ElementType
+	GetID() ElementID
 }
 
 type Element struct {
