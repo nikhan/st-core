@@ -99,6 +99,7 @@ func RecoverHandler(inner http.Handler) http.Handler {
 				}
 
 				WriteError(w, &Error{err.Error(), 500})
+				log.Println(identifyPanic())
 			}
 		}()
 

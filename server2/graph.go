@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+
+	"github.com/nytlabs/st-core/core"
 )
 
 type Graph struct {
@@ -13,6 +15,7 @@ type Graph struct {
 	elementParent map[ElementID]ElementID
 	Changes       chan interface{}
 	index         int64
+	library       map[string]core.Spec
 }
 
 func NewGraph() *Graph {
@@ -21,6 +24,7 @@ func NewGraph() *Graph {
 		elementParent: make(map[ElementID]ElementID),
 		Changes:       make(chan interface{}),
 		index:         0,
+		library:       core.GetLibrary(),
 	}
 }
 
@@ -29,48 +33,74 @@ func (g *Graph) generateID() ElementID {
 	return ElementID(strconv.FormatInt(g.index, 10))
 }
 
-func (g *Graph) addBlock(e *CreateElement) error {
+func (g *Graph) addRoutesFromPins(pins []core.Pin, direction string) ([]ID, error) {
+	routes := make([]*CreateElement, len(pins))
+	elementType := ROUTE
+	for i, _ := range pins {
+		routes[i] = &CreateElement{
+			Type:      &elementType,
+			Name:      &pins[i].Name,
+			JSONType:  &pins[i].Type,
+			Direction: &direction,
+		}
+	}
+	return g.Add(routes, nil)
+}
+
+func (g *Graph) addBlock(e *CreateElement) ([]ID, error) {
+	var newIDs []ID
 	b := &Block{
 		Element: Element{},
 	}
 
 	if e.Spec == nil {
-		return errors.New("block has no spec!")
+		return nil, errors.New("block has no spec!")
 	}
 
-	b.Spec = Spec(*e.Spec)
+	b.Spec = *e.Spec
+	spec, ok := core.GetLibrary()[b.Spec]
+	if !ok {
+		return nil, errors.New(fmt.Sprintf("could not create spec %s: does not exist"))
+	}
 
-	if *e.Position == nil {
+	if e.Position == nil {
 		b.Position = Position{
-			x: 0,
-			y: 0,
+			X: 0,
+			Y: 0,
 		}
 	} else {
-		b.Position = &e.Position
+		b.Position = *e.Position
 	}
 
-	if *e.Position.Routes == nil {
-		fmt.Println("wjp carws!")
+	if e.Routes == nil {
+		// no routes were sent with this block
+		// that means we need to create them.
+		inputs, err := g.addRoutesFromPins(spec.Inputs, INPUT)
+		if err != nil {
+			return nil, err
+		}
+		outputs, err := g.addRoutesFromPins(spec.Outputs, OUTPUT)
+		if err != nil {
+			return nil, err
+		}
+		newIDs = append(inputs, outputs...)
+		b.Routes = newIDs
 	} else {
-		b.Routes = &e.Routes
+		b.Routes = make([]ID, len(e.Routes))
+		for i, route := range e.Routes {
+			b.Routes[i] = ID{*route.ID}
+		}
 	}
 
 	g.elements[*e.ID] = b
 
-	/*if e.Position != nil {
-		block.SetPosition(*e.Position)
-	}
+	return newIDs, nil
+}
+func (g *Graph) addSource(e *CreateElement) ([]ID, error) {
 
-	if e.Alias != nil {
-		block.SetAlias(*e.Alias)
-	}*/
-
-	return nil
+	return []ID{}, nil
 }
 func (g *Graph) addGroup(e *CreateElement) error {
-	return nil
-}
-func (g *Graph) addSource(e *CreateElement) error {
 	return nil
 }
 func (g *Graph) addConnection(e *CreateElement) error {
@@ -80,11 +110,33 @@ func (g *Graph) addLink(e *CreateElement) error {
 	return nil
 }
 func (g *Graph) addRoute(e *CreateElement) error {
+	r := &Route{
+		Element: Element{},
+	}
+
+	if e.JSONType == nil {
+		return errors.New("could not create route, no JSONType found")
+	}
+
+	if e.Direction == nil {
+		return errors.New("could not create route, no Direction found")
+	}
+
+	if e.Name == nil {
+		return errors.New("could not create route, no Name")
+	}
+
+	r.Direction = *e.Direction
+	r.JSONType = *e.JSONType
+	r.Name = *e.Name
+
+	g.elements[*e.ID] = r
 	return nil
 }
 
-func (g *Graph) Add(elements []*CreateElement, parent *ElementID) error {
+func (g *Graph) Add(elements []*CreateElement, parent *ElementID) ([]ID, error) {
 	oldIDs := make(map[ElementID]*ElementID)
+	newIDs := []ID{}
 
 	// if a given id doesn't exist or conflicts with present elements, make a
 	// new one.
@@ -117,8 +169,8 @@ func (g *Graph) Add(elements []*CreateElement, parent *ElementID) error {
 		// update all children with new IDs
 		if element.Children != nil {
 			for index, child := range element.Children {
-				if _, ok := oldIDs[*child.ID]; ok {
-					element.Children[index].ID = oldIDs[*child.ID]
+				if _, ok := oldIDs[child.ID]; ok {
+					element.Children[index].ID = *oldIDs[child.ID]
 				}
 			}
 		}
@@ -136,14 +188,19 @@ func (g *Graph) Add(elements []*CreateElement, parent *ElementID) error {
 			}
 		}
 
+		if element.Type == nil {
+			return nil, errors.New("unable to import: element has no type")
+		}
+
 		var err error
+		var ids []ID
 		switch *element.Type {
 		case BLOCK:
-			err = g.addBlock(element)
+			ids, err = g.addBlock(element)
+		case SOURCE:
+			ids, err = g.addSource(element)
 		case GROUP:
 			err = g.addGroup(element)
-		case SOURCE:
-			err = g.addSource(element)
 		case CONNECTION:
 			err = g.addConnection(element)
 		case LINK:
@@ -154,27 +211,33 @@ func (g *Graph) Add(elements []*CreateElement, parent *ElementID) error {
 			err = errors.New(fmt.Sprintf("unable to import unknown type %s", *element.Type))
 		}
 
-		g.elements[*element.ID].Element.ID = *element.ID
-		g.elements[*element.ID].Element.Type = *element.Type
-
-		if *element.Alias != nil {
-			g.elements[*element.ID].Element.Alias = *element.Alias
+		if err != nil {
+			return nil, err
 		}
 
-		if err != nil {
-			return err
+		g.elements[*element.ID].SetID(*element.ID)
+		g.elements[*element.ID].SetType(*element.Type)
+
+		if element.Alias != nil {
+			g.elements[*element.ID].SetAlias(*element.Alias)
+		}
+
+		newIDs = append(newIDs, ID{*element.ID})
+
+		if ids != nil {
+			newIDs = append(newIDs, ids...)
 		}
 	}
 
-	return nil
+	return newIDs, nil
 }
 
-func (g *Graph) Get(ids ...ElementID) ([]*Elements, error) {
-	elements := []*Elements{}
+func (g *Graph) Get(ids ...ElementID) ([]Elements, error) {
+	elements := []Elements{}
 
 	if len(ids) == 0 {
 		for _, e := range g.elements {
-			elements = append(elements, &e)
+			elements = append(elements, e)
 		}
 	}
 

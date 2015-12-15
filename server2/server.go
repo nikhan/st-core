@@ -27,7 +27,7 @@ func (s *Server) CreateElementsHandler(w http.ResponseWriter, r *http.Request) {
 	s.graph.Lock()
 	defer s.graph.Unlock()
 
-	if err := s.graph.Add(*elements, nil); err != nil {
+	if _, err := s.graph.Add(*elements, nil); err != nil {
 		panic(err)
 	}
 }
@@ -39,7 +39,7 @@ func (s *Server) ParentCreateElementsHandler(w http.ResponseWriter, r *http.Requ
 	s.graph.Lock()
 	defer s.graph.Unlock()
 
-	if err := s.graph.Add(*elements, &id); err != nil {
+	if _, err := s.graph.Add(*elements, &id); err != nil {
 		panic(err)
 	}
 }
