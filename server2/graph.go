@@ -15,7 +15,8 @@ type Graph struct {
 	elementParent map[ElementID]ElementID
 	Changes       chan interface{}
 	index         int64
-	library       map[string]core.Spec
+	blockLibrary  map[string]core.Spec
+	sourceLibrary map[string]core.SourceSpec
 }
 
 func NewGraph() *Graph {
@@ -24,7 +25,8 @@ func NewGraph() *Graph {
 		elementParent: make(map[ElementID]ElementID),
 		Changes:       make(chan interface{}),
 		index:         0,
-		library:       core.GetLibrary(),
+		blockLibrary:  core.GetLibrary(),
+		sourceLibrary: core.GetSources(),
 	}
 }
 
@@ -58,18 +60,9 @@ func (g *Graph) addBlock(e *CreateElement) ([]ID, error) {
 	}
 
 	b.Spec = *e.Spec
-	spec, ok := core.GetLibrary()[b.Spec]
+	spec, ok := g.blockLibrary[b.Spec]
 	if !ok {
 		return nil, errors.New(fmt.Sprintf("could not create spec %s: does not exist"))
-	}
-
-	if e.Position == nil {
-		b.Position = Position{
-			X: 0,
-			Y: 0,
-		}
-	} else {
-		b.Position = *e.Position
 	}
 
 	if e.Routes == nil {
@@ -93,22 +86,75 @@ func (g *Graph) addBlock(e *CreateElement) ([]ID, error) {
 	}
 
 	g.elements[*e.ID] = b
-
 	return newIDs, nil
 }
+
 func (g *Graph) addSource(e *CreateElement) ([]ID, error) {
 
 	return []ID{}, nil
 }
-func (g *Graph) addGroup(e *CreateElement) error {
+
+func (g *Graph) addChild(parent ElementID, child ElementID) error {
+	if _, ok := g.elements[child]; !ok {
+		return errors.New(fmt.Sprintf("could not add child %s, does not exist", child))
+	}
+
+	if _, ok := g.elements[parent]; !ok {
+		return errors.New(fmt.Sprintf("could not modify parent %s, does not exist", parent))
+	}
+
+	group, ok := g.elements[parent].(*Group)
+	if !ok {
+		return errors.New(fmt.Sprintf("%s not a group", parent))
+	}
+
+	group.Children = append(group.Children, ID{child})
+	g.elements[child].SetParent(parent)
+
+	//add block routes
+	//	if block, ok := g.elements[child].(Block); ok {
+	//	}
+
 	return nil
 }
+
+func (g *Graph) deleteChild(parent ElementID, child ElementID) error {
+	if _, ok := g.elements[parent]; !ok {
+		return errors.New(fmt.Sprintf("could not not find parent %s", parent))
+	}
+	//TODO
+	return nil
+}
+
+func (g *Graph) addGroup(e *CreateElement) error {
+	group := &Group{
+		Element:  Element{},
+		Children: []ID{},
+		Routes:   []GroupRoute{},
+	}
+
+	g.elements[*e.ID] = group
+
+	if e.Children != nil {
+		for _, child := range e.Children {
+			err := g.addChild(*e.ID, child.ID)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
+}
+
 func (g *Graph) addConnection(e *CreateElement) error {
 	return nil
 }
+
 func (g *Graph) addLink(e *CreateElement) error {
 	return nil
 }
+
 func (g *Graph) addRoute(e *CreateElement) error {
 	r := &Route{
 		Element: Element{},
@@ -220,6 +266,17 @@ func (g *Graph) Add(elements []*CreateElement, parent *ElementID) ([]ID, error) 
 
 		if element.Alias != nil {
 			g.elements[*element.ID].SetAlias(*element.Alias)
+		}
+
+		if n, ok := g.elements[*element.ID].(Nodes); ok {
+			if element.Position != nil {
+				n.SetPosition(*element.Position)
+			} else {
+				n.SetPosition(Position{
+					X: 0,
+					Y: 0,
+				})
+			}
 		}
 
 		newIDs = append(newIDs, ID{*element.ID})

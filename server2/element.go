@@ -22,12 +22,28 @@ type Elements interface {
 	SetAlias(string)
 	GetType() string
 	GetID() ElementID
+	SetParent(ElementID)
+	GetParent() ElementID
+}
+
+type Nodes interface {
+	SetPosition(Position)
+	GetPosition() Position
 }
 
 type Element struct {
-	ID    ElementID `json:"id"`
-	Type  string    `json:"type"`
-	Alias string    `json:"alias"`
+	Parent ElementID `json:-`
+	ID     ElementID `json:"id"`
+	Type   string    `json:"type"`
+	Alias  string    `json:"alias"`
+}
+
+func (e *Element) SetParent(id ElementID) {
+	e.Parent = id
+}
+
+func (e *Element) GetParent() ElementID {
+	return e.Parent
 }
 
 func (e *Element) SetID(id ElementID) {
@@ -63,15 +79,26 @@ type Position struct {
 	Y int `json:"y"`
 }
 
+func (p *Position) SetPosition(pos Position) {
+	p.X = pos.X
+	p.Y = pos.Y
+}
+
+func (p *Position) GetPosition() Position {
+	return *p
+}
+
+type GroupRoute struct {
+	ID     ElementID `json:"id"`
+	Hidden bool      `json:"hidden"`
+	Alias  string    `json:"alias"`
+}
+
 type Group struct {
 	Element
 	Position `json:"position"`
-	Routes   []struct {
-		ID     ElementID `json:"id"`
-		Hidden bool      `json:"hidden"`
-		Alias  string    `json:"alias"`
-	} `json:"routes"`
-	Children []ID `json:"children"`
+	Routes   []GroupRoute `json:"routes"`
+	Children []ID         `json:"children"`
 }
 
 type Block struct {
