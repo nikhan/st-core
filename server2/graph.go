@@ -94,6 +94,22 @@ func (g *Graph) addSource(e *CreateElement) ([]ID, error) {
 	return []ID{}, nil
 }
 
+func (g *Graph) addRouteAscending(parent ElementID, route ElementID) {
+	group, _ := g.elements[parent].(*Group)
+
+	group.Routes = append(group.Routes, GroupRoute{
+		ID:     route,
+		Hidden: false,
+		Alias:  "",
+	})
+
+	node, _ := g.elements[parent].(Nodes)
+	nodeParent := node.GetParent()
+	if nodeParent != nil {
+		g.addRouteAscending(*nodeParent, route)
+	}
+}
+
 func (g *Graph) addChild(parent ElementID, child ElementID) error {
 	if _, ok := g.elements[child]; !ok {
 		return errors.New(fmt.Sprintf("could not add child %s, does not exist", child))
@@ -108,12 +124,17 @@ func (g *Graph) addChild(parent ElementID, child ElementID) error {
 		return errors.New(fmt.Sprintf("%s not a group", parent))
 	}
 
-	group.Children = append(group.Children, ID{child})
-	g.elements[child].SetParent(parent)
+	node, ok := g.elements[child].(Nodes)
+	if !ok {
+		return errors.New(fmt.Sprintf("could not add child %s, not a node", child))
+	}
 
-	//add block routes
-	//	if block, ok := g.elements[child].(Block); ok {
-	//	}
+	group.Children = append(group.Children, ID{child})
+	node.SetParent(&parent)
+
+	for _, route := range node.GetRoutes() {
+		g.addRouteAscending(parent, route.ID)
+	}
 
 	return nil
 }

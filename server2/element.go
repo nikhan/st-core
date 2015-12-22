@@ -22,28 +22,20 @@ type Elements interface {
 	SetAlias(string)
 	GetType() string
 	GetID() ElementID
-	SetParent(ElementID)
-	GetParent() ElementID
 }
 
 type Nodes interface {
 	SetPosition(Position)
 	GetPosition() Position
+	GetRoutes() []ID
+	SetParent(*ElementID)
+	GetParent() *ElementID
 }
 
 type Element struct {
-	Parent ElementID `json:-`
-	ID     ElementID `json:"id"`
-	Type   string    `json:"type"`
-	Alias  string    `json:"alias"`
-}
-
-func (e *Element) SetParent(id ElementID) {
-	e.Parent = id
-}
-
-func (e *Element) GetParent() ElementID {
-	return e.Parent
+	ID    ElementID `json:"id"`
+	Type  string    `json:"type"`
+	Alias string    `json:"alias"`
 }
 
 func (e *Element) SetID(id ElementID) {
@@ -96,23 +88,66 @@ type GroupRoute struct {
 
 type Group struct {
 	Element
+	Parent   *ElementID `json:"-"`
 	Position `json:"position"`
 	Routes   []GroupRoute `json:"routes"`
 	Children []ID         `json:"children"`
 }
 
+func (g *Group) GetParent() *ElementID {
+	return g.Parent
+}
+
+func (g *Group) SetParent(parent *ElementID) {
+	g.Parent = parent
+}
+
+func (g *Group) GetRoutes() []ID {
+	ids := make([]ID, len(g.Routes))
+	for i, route := range g.Routes {
+		ids[i] = ID{route.ID}
+	}
+	return ids
+}
+
 type Block struct {
 	Element
-	Spec     string `json:"spec"`
+	Parent   *ElementID `json:"-"`
+	Spec     string     `json:"spec"`
 	Position `json:"position"`
 	Routes   []ID `json:"routes"`
 }
 
+func (b *Block) GetParent() *ElementID {
+	return b.Parent
+}
+
+func (b *Block) SetParent(parent *ElementID) {
+	b.Parent = parent
+}
+
+func (b *Block) GetRoutes() []ID {
+	return b.Routes
+}
+
 type Source struct {
 	Element
-	Spec     string `json:"spec"`
+	Parent   *ElementID `json:"-"`
+	Spec     string     `json:"spec"`
 	Position `json:"position"`
 	Routes   []ID `json:"routes"`
+}
+
+func (s *Source) GetParent() *ElementID {
+	return s.Parent
+}
+
+func (s *Source) SetParent(parent *ElementID) {
+	s.Parent = parent
+}
+
+func (s *Source) GetRoutes() []ID {
+	return s.Routes
 }
 
 type Link struct {
