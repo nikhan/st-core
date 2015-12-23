@@ -138,12 +138,9 @@ func (g *Graph) addRouteAscending(parent ElementID, route ElementID) {
 }
 
 func (g *Graph) addChild(parent ElementID, child ElementID) error {
-	if _, ok := g.elements[child]; !ok {
-		return errors.New(fmt.Sprintf("could not add child %s, does not exist", child))
-	}
-
-	if _, ok := g.elements[parent]; !ok {
-		return errors.New(fmt.Sprintf("could not modify parent %s, does not exist", parent))
+	err := g.validateIDs(parent, child)
+	if err != nil {
+		return err
 	}
 
 	group, ok := g.elements[parent].(*Group)
@@ -167,10 +164,12 @@ func (g *Graph) addChild(parent ElementID, child ElementID) error {
 }
 
 func (g *Graph) deleteChild(parent ElementID, child ElementID) error {
-	if _, ok := g.elements[parent]; !ok {
-		return errors.New(fmt.Sprintf("could not not find parent %s", parent))
+	err := g.validateIDs(parent, child)
+	if err != nil {
+		return err
 	}
-	//TODO
+	// TODO
+
 	return nil
 }
 
@@ -196,23 +195,11 @@ func (g *Graph) addGroup(e *CreateElement) error {
 }
 
 func (g *Graph) validateEdge(e *CreateElement) error {
-	if e.SourceID == nil {
-		return errors.New("connection missing source or source")
-	}
-
-	if e.TargetID == nil {
+	if e.SourceID == nil || e.TargetID == nil {
 		return errors.New("connection missing source or target")
 	}
 
-	if _, ok := g.elements[*e.Source]; !ok {
-		return errors.New("connection source does not exist")
-	}
-
-	if _, ok := g.elements[*e.Target]; !ok {
-		return errors.New("target source does not exist")
-	}
-
-	return nil
+	return g.validateIDs(ElementID(*e.SourceID), ElementID(*e.TargetID))
 }
 
 func (g *Graph) addConnection(e *CreateElement) error {
@@ -225,8 +212,8 @@ func (g *Graph) addConnection(e *CreateElement) error {
 		Element: Element{},
 	}
 
-	c.SourceID = *e.SourceID
-	c.TargetID = *e.TargetID
+	c.SourceID = ElementID(*e.SourceID)
+	c.TargetID = ElementID(*e.TargetID)
 
 	g.elements[*e.ID] = c
 	return nil
@@ -242,8 +229,8 @@ func (g *Graph) addLink(e *CreateElement) error {
 		Element: Element{},
 	}
 
-	l.SourceID = *e.SourceID
-	l.TargetID = *e.TargetID
+	l.SourceID = ElementID(*e.SourceID)
+	l.TargetID = ElementID(*e.TargetID)
 
 	g.elements[*e.ID] = l
 	return nil
@@ -404,26 +391,102 @@ func (g *Graph) GetState(id ElementID) (interface{}, error) {
 	return struct{}{}, nil
 }
 
+func (g *Graph) validateIDs(ids ...ElementID) error {
+	for _, id := range ids {
+		if _, ok := g.elements[id]; !ok {
+			return errors.New(fmt.Sprintf("error could not find %s", id))
+		}
+	}
+	return nil
+}
+
 func (g *Graph) Update(id ElementID, update *UpdateElement) error {
+	err := g.validateIDs(id)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
 func (g *Graph) UpdateGroupRoute(id ElementID, routeID ElementID, update *UpdateElement) error {
+	err := g.validateIDs(id, routeID)
+	if err != nil {
+		return err
+	}
+
+	group := g.elements[id].(*Group)
+	route, err := group.GetRoute(routeID)
+	if err != nil {
+		return err
+	}
+
+	if update.Alias != nil {
+		route.Alias = *update.Alias
+	}
+
+	if update.Hidden != nil {
+		route.Hidden = *update.Hidden
+	}
+
 	return nil
 }
 
 func (g *Graph) BatchTranslate(ids []ElementID, xOffset int, yOffset int) error {
+	err := g.validateIDs(ids...)
+	if err != nil {
+		return err
+	}
+
+	for _, id := range ids {
+		node := g.elements[id].(Nodes)
+		position := node.GetPosition()
+		position.X += xOffset
+		position.Y += yOffset
+		node.SetPosition(position)
+	}
+
 	return nil
 }
 
 func (g *Graph) BatchUngroup(ids []ElementID) error {
+	err := g.validateIDs(ids...)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
 func (g *Graph) BatchDelete(ids []ElementID) error {
+	err := g.validateIDs(ids...)
+	if err != nil {
+		return err
+	}
+
+	for _, id := range ids {
+		switch g.elements[id].(type) {
+		case *Block:
+			fmt.Println("deleting block")
+		case *Group:
+			fmt.Println("deleting group")
+		case *Source:
+			fmt.Println("deleting source")
+		case *Connection:
+			fmt.Println("deleting conection")
+		case *Link:
+			fmt.Println("deleting link")
+		}
+	}
+
 	return nil
 }
 
 func (g *Graph) BatchReset(ids []ElementID) error {
+	err := g.validateIDs(ids...)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }

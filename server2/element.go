@@ -1,6 +1,11 @@
 package stserver
 
-import "github.com/nytlabs/st-core/core"
+import (
+	"errors"
+	"fmt"
+
+	"github.com/nytlabs/st-core/core"
+)
 
 const (
 	BLOCK      = "block"
@@ -108,6 +113,15 @@ func (g *Group) GetRoutes() []ID {
 		ids[i] = ID{route.ID}
 	}
 	return ids
+}
+
+func (g *Group) GetRoute(id ElementID) (*GroupRoute, error) {
+	for i, gr := range g.Routes {
+		if gr.ID == id {
+			return &g.Routes[i], nil
+		}
+	}
+	return nil, errors.New(fmt.Sprintf("could not find route %s", id))
 }
 
 type Block struct {
