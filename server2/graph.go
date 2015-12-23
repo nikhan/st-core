@@ -90,8 +90,35 @@ func (g *Graph) addBlock(e *CreateElement) ([]ID, error) {
 }
 
 func (g *Graph) addSource(e *CreateElement) ([]ID, error) {
+	s := &Source{
+		Element: Element{},
+	}
 
-	return []ID{}, nil
+	s.Spec = *e.Spec
+	spec, ok := g.sourceLibrary[s.Spec]
+	if !ok {
+		return nil, errors.New(fmt.Sprintf("could not create spec %s: does not exist"))
+	}
+
+	elements := make([]*CreateElement, 1)
+	elementType := ROUTE
+	elementDirection := OUTPUT
+	elementJSONType := core.ANY
+	elements[0] = &CreateElement{
+		Type:      &elementType,
+		Name:      &spec.Name,
+		JSONType:  &elementJSONType,
+		Direction: &elementDirection,
+		Source:    &spec.Name,
+	}
+	newIDs, err := g.Add(elements, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	s.Routes = newIDs
+	g.elements[*e.ID] = s
+	return newIDs, nil
 }
 
 func (g *Graph) addRouteAscending(parent ElementID, route ElementID) {
@@ -168,11 +195,57 @@ func (g *Graph) addGroup(e *CreateElement) error {
 	return nil
 }
 
+func (g *Graph) validateEdge(e *CreateElement) error {
+	if e.SourceID == nil {
+		return errors.New("connection missing source or source")
+	}
+
+	if e.TargetID == nil {
+		return errors.New("connection missing source or target")
+	}
+
+	if _, ok := g.elements[*e.Source]; !ok {
+		return errors.New("connection source does not exist")
+	}
+
+	if _, ok := g.elements[*e.Target]; !ok {
+		return errors.New("target source does not exist")
+	}
+
+	return nil
+}
+
 func (g *Graph) addConnection(e *CreateElement) error {
+	err := g.validateEdge(e)
+	if err != nil {
+		return err
+	}
+
+	c := &Connection{
+		Element: Element{},
+	}
+
+	c.SourceID = *e.SourceID
+	c.TargetID = *e.TargetID
+
+	g.elements[*e.ID] = c
 	return nil
 }
 
 func (g *Graph) addLink(e *CreateElement) error {
+	err := g.validateEdge(e)
+	if err != nil {
+		return err
+	}
+
+	l := &Link{
+		Element: Element{},
+	}
+
+	l.SourceID = *e.SourceID
+	l.TargetID = *e.TargetID
+
+	g.elements[*e.ID] = l
 	return nil
 }
 
@@ -196,6 +269,7 @@ func (g *Graph) addRoute(e *CreateElement) error {
 	r.Direction = *e.Direction
 	r.JSONType = *e.JSONType
 	r.Name = *e.Name
+	r.Source = *e.Source
 
 	g.elements[*e.ID] = r
 	return nil

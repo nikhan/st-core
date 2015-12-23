@@ -168,7 +168,7 @@ type Route struct {
 	Value     interface{}   `json:"value"`
 	Direction string        `json:"direction"`
 	Source    string        `json:"source"`
-	JSONType  core.JSONType `json:"json_type":`
+	JSONType  core.JSONType `json:"json_type"`
 }
 
 type CreateElement struct {
@@ -177,6 +177,7 @@ type CreateElement struct {
 	JSONType  *core.JSONType `json:"json_type"`
 	Direction *string        `json:"direction"`
 	Name      *string        `json:"name"`
+	Source    *string        `json:"source"`
 	Spec      *string        `json:"spec"`
 	Alias     *string        `json:"alias"`
 	Position  *Position      `json:"position"`
