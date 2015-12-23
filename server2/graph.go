@@ -126,8 +126,8 @@ func (g *Graph) addRouteAscending(parent ElementID, route ElementID) {
 	group, _ := g.elements[parent].(*Group)
 
 	// check to see if this group already has this route added
-	groupRoute, err := group.GetRoute(route)
-	if err != nil {
+	groupRoute, ok := group.GetRoute(route)
+	if !ok {
 		group.Routes = append(group.Routes, GroupRoute{
 			ID:     route,
 			Hidden: hidden,
@@ -137,10 +137,8 @@ func (g *Graph) addRouteAscending(parent ElementID, route ElementID) {
 		hidden = groupRoute.Hidden
 	}
 
-	node, _ := g.elements[parent].(Nodes)
-	nodeParent := node.GetParent()
-	if nodeParent != nil && hidden == false {
-		g.addRouteAscending(*nodeParent, route)
+	if parentID, ok := g.elementParent[parent]; ok && !hidden {
+		g.addRouteAscending(parentID, route)
 	}
 }
 
@@ -161,12 +159,11 @@ func (g *Graph) addChild(parent ElementID, child ElementID) error {
 	}
 
 	group.Children = append(group.Children, ID{child})
-	node.SetParent(&parent)
+	g.elementParent[child] = parent
 
 	for _, route := range node.GetRoutes() {
 		g.addRouteAscending(parent, route.ID)
 	}
-
 	return nil
 }
 
@@ -423,9 +420,9 @@ func (g *Graph) UpdateGroupRoute(id ElementID, routeID ElementID, update *Update
 	}
 
 	group := g.elements[id].(*Group)
-	route, err := group.GetRoute(routeID)
-	if err != nil {
-		return err
+	route, ok := group.GetRoute(routeID)
+	if !ok {
+		return errors.New(fmt.Sprintf("could not find route %s on group %s", id, routeID))
 	}
 
 	if update.Alias != nil {

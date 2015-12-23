@@ -1,11 +1,6 @@
 package stserver
 
-import (
-	"errors"
-	"fmt"
-
-	"github.com/nytlabs/st-core/core"
-)
+import "github.com/nytlabs/st-core/core"
 
 const (
 	BLOCK      = "block"
@@ -33,8 +28,6 @@ type Nodes interface {
 	SetPosition(Position)
 	GetPosition() Position
 	GetRoutes() []ID
-	SetParent(*ElementID)
-	GetParent() *ElementID
 }
 
 type Element struct {
@@ -93,18 +86,9 @@ type GroupRoute struct {
 
 type Group struct {
 	Element
-	Parent   *ElementID `json:"-"`
 	Position `json:"position"`
 	Routes   []GroupRoute `json:"routes"`
 	Children []ID         `json:"children"`
-}
-
-func (g *Group) GetParent() *ElementID {
-	return g.Parent
-}
-
-func (g *Group) SetParent(parent *ElementID) {
-	g.Parent = parent
 }
 
 func (g *Group) GetRoutes() []ID {
@@ -115,29 +99,20 @@ func (g *Group) GetRoutes() []ID {
 	return ids
 }
 
-func (g *Group) GetRoute(id ElementID) (*GroupRoute, error) {
+func (g *Group) GetRoute(id ElementID) (*GroupRoute, bool) {
 	for i, gr := range g.Routes {
 		if gr.ID == id {
-			return &g.Routes[i], nil
+			return &g.Routes[i], true
 		}
 	}
-	return nil, errors.New(fmt.Sprintf("could not find route %s", id))
+	return nil, false
 }
 
 type Block struct {
 	Element
-	Parent   *ElementID `json:"-"`
-	Spec     string     `json:"spec"`
+	Spec     string `json:"spec"`
 	Position `json:"position"`
 	Routes   []ID `json:"routes"`
-}
-
-func (b *Block) GetParent() *ElementID {
-	return b.Parent
-}
-
-func (b *Block) SetParent(parent *ElementID) {
-	b.Parent = parent
 }
 
 func (b *Block) GetRoutes() []ID {
@@ -146,18 +121,9 @@ func (b *Block) GetRoutes() []ID {
 
 type Source struct {
 	Element
-	Parent   *ElementID `json:"-"`
-	Spec     string     `json:"spec"`
+	Spec     string `json:"spec"`
 	Position `json:"position"`
 	Routes   []ID `json:"routes"`
-}
-
-func (s *Source) GetParent() *ElementID {
-	return s.Parent
-}
-
-func (s *Source) SetParent(parent *ElementID) {
-	s.Parent = parent
 }
 
 func (s *Source) GetRoutes() []ID {
