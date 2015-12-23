@@ -6,6 +6,8 @@ import (
 	"strings"
 )
 
+// gets line num of panic
+// from https://gist.github.com/swdunlop/9629168
 func identifyPanic() string {
 	var name, file string
 	var line int

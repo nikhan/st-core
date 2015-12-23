@@ -121,9 +121,18 @@ func (g *Graph) addSource(e *CreateElement) ([]ID, error) {
 	return newIDs, nil
 }
 
-func (g *Graph) addRouteAscending(parent ElementID, route ElementID) {
+func (g *Graph) addRouteAscending(parent ElementID, route ElementID) error {
+	err := g.validateIDs(parent, route)
+	if err != nil {
+		return err
+	}
+
+	group, ok := g.elements[parent].(*Group)
+	if !ok {
+		return errors.New(fmt.Sprintf("addRouteAscending: %s not a group", parent))
+	}
+
 	hidden := false
-	group, _ := g.elements[parent].(*Group)
 
 	// check to see if this group already has this route added
 	groupRoute, ok := group.GetRoute(route)
@@ -138,8 +147,41 @@ func (g *Graph) addRouteAscending(parent ElementID, route ElementID) {
 	}
 
 	if parentID, ok := g.elementParent[parent]; ok && !hidden {
-		g.addRouteAscending(parentID, route)
+		return g.addRouteAscending(parentID, route)
 	}
+
+	return nil
+}
+
+func (g *Graph) deleteRouteAscending(parent ElementID, route ElementID) error {
+	err := g.validateIDs(parent, route)
+	if err != nil {
+		return err
+	}
+
+	group, ok := g.elements[parent].(*Group)
+	if !ok {
+		return errors.New(fmt.Sprintf("deleteRouteAscending: %s not a group", parent))
+	}
+
+	index := -1
+	for i, r := range group.Routes {
+		if r.ID == route {
+			index = i
+		}
+	}
+
+	if index == -1 {
+		return errors.New(fmt.Sprintf("deleteRouteAscending: %s does not have route %s", parent, route))
+	}
+
+	group.Routes = append(group.Routes[:index], group.Routes[index+1:]...)
+
+	if parentID, ok := g.elementParent[parent]; ok {
+		return g.deleteRouteAscending(parentID, route)
+	}
+
+	return nil
 }
 
 func (g *Graph) addChild(parent ElementID, child ElementID) error {
@@ -172,7 +214,33 @@ func (g *Graph) deleteChild(parent ElementID, child ElementID) error {
 	if err != nil {
 		return err
 	}
-	// TODO
+
+	group, ok := g.elements[parent].(*Group)
+	if !ok {
+		return errors.New(fmt.Sprintf("%s not a group", parent))
+	}
+
+	node, ok := g.elements[child].(Nodes)
+	if !ok {
+		return errors.New(fmt.Sprintf("could not add child %s, not a node", child))
+	}
+
+	index := -1
+	for i, c := range group.Children {
+		if c.ID == child {
+			index = i
+		}
+	}
+
+	if index == -1 {
+		return errors.New(fmt.Sprintf("group %s does not have child %s", parent, child))
+	}
+
+	group.Children = append(group.Children[:index], group.Children[index+1:]...)
+
+	for _, route := range node.GetRoutes() {
+		g.deleteRouteAscending(parent, route.ID)
+	}
 
 	return nil
 }
