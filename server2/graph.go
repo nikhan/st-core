@@ -122,17 +122,24 @@ func (g *Graph) addSource(e *CreateElement) ([]ID, error) {
 }
 
 func (g *Graph) addRouteAscending(parent ElementID, route ElementID) {
+	hidden := false
 	group, _ := g.elements[parent].(*Group)
 
-	group.Routes = append(group.Routes, GroupRoute{
-		ID:     route,
-		Hidden: false,
-		Alias:  "",
-	})
+	// check to see if this group already has this route added
+	groupRoute, err := group.GetRoute(route)
+	if err != nil {
+		group.Routes = append(group.Routes, GroupRoute{
+			ID:     route,
+			Hidden: hidden,
+			Alias:  "",
+		})
+	} else {
+		hidden = groupRoute.Hidden
+	}
 
 	node, _ := g.elements[parent].(Nodes)
 	nodeParent := node.GetParent()
-	if nodeParent != nil {
+	if nodeParent != nil && hidden == false {
 		g.addRouteAscending(*nodeParent, route)
 	}
 }
