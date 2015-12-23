@@ -94,23 +94,27 @@ func (g *Graph) addSource(e *CreateElement) ([]ID, error) {
 		Element: Element{},
 	}
 
+	if e.Spec == nil {
+		return nil, errors.New("source has no spec!")
+	}
+
 	s.Spec = *e.Spec
 	spec, ok := g.sourceLibrary[s.Spec]
 	if !ok {
 		return nil, errors.New(fmt.Sprintf("could not create spec %s: does not exist"))
 	}
 
-	elements := make([]*CreateElement, 1)
 	elementType := ROUTE
 	elementDirection := OUTPUT
 	elementJSONType := core.ANY
-	elements[0] = &CreateElement{
+	elements := []*CreateElement{&CreateElement{
 		Type:      &elementType,
 		Name:      &spec.Name,
 		JSONType:  &elementJSONType,
 		Direction: &elementDirection,
 		Source:    &spec.Name,
-	}
+	}}
+
 	newIDs, err := g.Add(elements, nil)
 	if err != nil {
 		return nil, err
@@ -328,7 +332,9 @@ func (g *Graph) addRoute(e *CreateElement) error {
 	r.Direction = *e.Direction
 	r.JSONType = *e.JSONType
 	r.Name = *e.Name
-	r.Source = *e.Source
+	if e.Source != nil {
+		r.Source = *e.Source
+	}
 
 	g.elements[*e.ID] = r
 	return nil
