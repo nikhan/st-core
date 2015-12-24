@@ -24,6 +24,7 @@ func TestAdd(t *testing.T) {
 	if err == nil {
 		t.Error("expected error")
 	}
+	fmt.Println(err)
 
 	// should error: block as no spec
 	_, err = g.Add([]*CreateElement{&CreateElement{
@@ -32,6 +33,7 @@ func TestAdd(t *testing.T) {
 	if err == nil {
 		t.Error("expected error")
 	}
+	fmt.Println(err)
 
 	// should error: source has no spec
 	_, err = g.Add([]*CreateElement{&CreateElement{
@@ -40,6 +42,7 @@ func TestAdd(t *testing.T) {
 	if err == nil {
 		t.Error("expected error")
 	}
+	fmt.Println(err)
 
 	// create group
 	_, err = g.Add([]*CreateElement{&CreateElement{
@@ -48,6 +51,7 @@ func TestAdd(t *testing.T) {
 	if err != nil {
 		t.Error("error adding group")
 	}
+	fmt.Println(err)
 
 	// create + block
 	_, err = g.Add([]*CreateElement{&CreateElement{
@@ -57,6 +61,7 @@ func TestAdd(t *testing.T) {
 	if err != nil {
 		t.Error("error adding block")
 	}
+	fmt.Println(err)
 
 	// create + block with position
 	_, err = g.Add([]*CreateElement{&CreateElement{
@@ -70,6 +75,7 @@ func TestAdd(t *testing.T) {
 	if err != nil {
 		t.Error("error adding block")
 	}
+	fmt.Println(err)
 
 	// create + block with position and alias
 	_, err = g.Add([]*CreateElement{&CreateElement{
@@ -84,6 +90,7 @@ func TestAdd(t *testing.T) {
 	if err != nil {
 		t.Error("error adding block")
 	}
+	fmt.Println(err)
 
 	// should error: create connection no source or target
 	_, err = g.Add([]*CreateElement{&CreateElement{
@@ -92,6 +99,7 @@ func TestAdd(t *testing.T) {
 	if err == nil {
 		t.Error("expected error ")
 	}
+	fmt.Println(err)
 
 	// should error: create connection no source or target
 	_, err = g.Add([]*CreateElement{&CreateElement{
@@ -100,6 +108,7 @@ func TestAdd(t *testing.T) {
 	if err == nil {
 		t.Error("expected error ")
 	}
+	fmt.Println(err)
 
 	// connect routes
 	source := ElementID("12")
@@ -112,6 +121,7 @@ func TestAdd(t *testing.T) {
 	if err != nil {
 		t.Error("error adding connection")
 	}
+	fmt.Println(err)
 
 	// link routes
 	_, err = g.Add([]*CreateElement{&CreateElement{
@@ -121,14 +131,16 @@ func TestAdd(t *testing.T) {
 	if err != nil {
 		t.Error("error adding block")
 	}
+	fmt.Println(err)
 
 	_, err = g.Add([]*CreateElement{&CreateElement{
 		Type: ref(SOURCE),
 		Spec: ref("value"),
 	}}, nil)
 	if err != nil {
-		t.Error("expected error")
+		t.Error("error adding source")
 	}
+	fmt.Println(err)
 
 	source = ElementID("22")
 	target = ElementID("24")
@@ -140,6 +152,67 @@ func TestAdd(t *testing.T) {
 	if err != nil {
 		t.Error("error adding link")
 	}
+	fmt.Println(err)
+
+	// should error: create connection with bad ids
+	badID := ElementID("foo")
+	_, err = g.Add([]*CreateElement{&CreateElement{
+		Type:     ref(CONNECTION),
+		SourceID: &badID,
+		TargetID: &badID,
+	}}, nil)
+	if err == nil {
+		t.Error("expected error ")
+	}
+	fmt.Println(err)
+
+	// should error: create group with bad children
+	_, err = g.Add([]*CreateElement{&CreateElement{
+		Type:     ref(GROUP),
+		Children: []ID{ID{badID}},
+	}}, nil)
+	if err == nil {
+		t.Error("expected error")
+	}
+	fmt.Println(err)
+
+	// should error: create group with bad routes
+	_, err = g.Add([]*CreateElement{&CreateElement{
+		Type: ref(GROUP),
+		Routes: []GroupRoute{GroupRoute{
+			ID: badID,
+		}},
+	}}, nil)
+	if err == nil {
+		t.Error("expected error")
+	}
+	fmt.Println(err)
+
+	// should error: create source with bad routes
+	_, err = g.Add([]*CreateElement{&CreateElement{
+		Type: ref(SOURCE),
+		Spec: ref("value"),
+		Routes: []GroupRoute{GroupRoute{
+			ID: badID,
+		}},
+	}}, nil)
+	if err == nil {
+		t.Error("expected error")
+	}
+	fmt.Println(err)
+
+	// should error: create block with bad routes
+	_, err = g.Add([]*CreateElement{&CreateElement{
+		Type: ref(BLOCK),
+		Spec: ref("+"),
+		Routes: []GroupRoute{GroupRoute{
+			ID: badID,
+		}},
+	}}, nil)
+	if err == nil {
+		t.Error("expected error")
+	}
+	fmt.Println(err)
 }
 
 func TestParent(t *testing.T) {

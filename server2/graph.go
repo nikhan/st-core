@@ -19,6 +19,7 @@ type Graph struct {
 	sourceLibrary map[string]core.SourceSpec
 }
 
+// NewGraph returns a reference to an initialized Graph
 func NewGraph() *Graph {
 	return &Graph{
 		elements:      make(map[ElementID]Elements),
@@ -30,11 +31,13 @@ func NewGraph() *Graph {
 	}
 }
 
+// generateID generates a new unique ID for the running graph as a string.
 func (g *Graph) generateID() ElementID {
 	g.index += 1
 	return ElementID(strconv.FormatInt(g.index, 10))
 }
 
+// addRouteFromPins accepts a slice of core.Spec pins, a direction, and adds them to the graph.
 func (g *Graph) addRoutesFromPins(pins []core.Pin, direction string) ([]ID, error) {
 	routes := make([]*CreateElement, len(pins))
 	elementType := ROUTE
@@ -49,6 +52,9 @@ func (g *Graph) addRoutesFromPins(pins []core.Pin, direction string) ([]ID, erro
 	return g.Add(routes, nil)
 }
 
+// addBlock initializes a core.Block and adds a Block to the graph.
+// If addBlock receives a Block with no routes, it will automatically generate them from the corresponding core.Spec.
+// If addBlock receives a Block with routes, it will assume that those routes have already been created.
 func (g *Graph) addBlock(e *CreateElement) ([]ID, error) {
 	var newIDs []ID
 	b := &Block{
@@ -81,7 +87,7 @@ func (g *Graph) addBlock(e *CreateElement) ([]ID, error) {
 	} else {
 		b.Routes = make([]ID, len(e.Routes))
 		for i, route := range e.Routes {
-			b.Routes[i] = ID{*route.ID}
+			b.Routes[i] = ID{route.ID}
 		}
 	}
 
@@ -89,6 +95,9 @@ func (g *Graph) addBlock(e *CreateElement) ([]ID, error) {
 	return newIDs, nil
 }
 
+// addSource initializes a core.Source and adds a Source to the graph.
+// TODO: addSource always adds a route to the graph regardless of whether or not the imported Source has one.
+// addSource should function similar to addBlock, and only create a new route if the imported Source does not have one.
 func (g *Graph) addSource(e *CreateElement) ([]ID, error) {
 	s := &Source{
 		Element: Element{},
@@ -157,6 +166,7 @@ func (g *Graph) addRouteAscending(parent ElementID, route ElementID) error {
 	return nil
 }
 
+// deleteRouteAscending deletes a route for a node and its parents.
 func (g *Graph) deleteRouteAscending(parent ElementID, route ElementID) error {
 	err := g.validateIDs(parent, route)
 	if err != nil {
@@ -188,6 +198,9 @@ func (g *Graph) deleteRouteAscending(parent ElementID, route ElementID) error {
 	return nil
 }
 
+// addChild adds a child to a group.
+// addChild automatically adds all routes from that child to that group and its parents.
+// TODO: addChild should update g.elementParent
 func (g *Graph) addChild(parent ElementID, child ElementID) error {
 	err := g.validateIDs(parent, child)
 	if err != nil {
@@ -213,6 +226,9 @@ func (g *Graph) addChild(parent ElementID, child ElementID) error {
 	return nil
 }
 
+// deleteChild removes a child from a group.
+// deleteChild automatically removes all routes from that group and its parents.
+// TODO: deleteChild should update g.elementParent
 func (g *Graph) deleteChild(parent ElementID, child ElementID) error {
 	err := g.validateIDs(parent, child)
 	if err != nil {
@@ -249,6 +265,8 @@ func (g *Graph) deleteChild(parent ElementID, child ElementID) error {
 	return nil
 }
 
+// addGroup adds a group to the graph.
+// If the added group has children, we automatically add those children to the new group.
 func (g *Graph) addGroup(e *CreateElement) error {
 	group := &Group{
 		Element:  Element{},
@@ -270,6 +288,7 @@ func (g *Graph) addGroup(e *CreateElement) error {
 	return nil
 }
 
+// validateEdge ensures that all given ids exist in the graph.
 func (g *Graph) validateEdge(e *CreateElement) error {
 	if e.SourceID == nil || e.TargetID == nil {
 		return errors.New("connection missing source or target")
@@ -278,6 +297,7 @@ func (g *Graph) validateEdge(e *CreateElement) error {
 	return g.validateIDs(ElementID(*e.SourceID), ElementID(*e.TargetID))
 }
 
+// addConnection creates a connection and adds it to the graph.
 func (g *Graph) addConnection(e *CreateElement) error {
 	err := g.validateEdge(e)
 	if err != nil {
@@ -295,6 +315,7 @@ func (g *Graph) addConnection(e *CreateElement) error {
 	return nil
 }
 
+// addLink creates a link and adds it to the graph.
 func (g *Graph) addLink(e *CreateElement) error {
 	err := g.validateEdge(e)
 	if err != nil {
@@ -312,6 +333,7 @@ func (g *Graph) addLink(e *CreateElement) error {
 	return nil
 }
 
+// addRoute creates a route and adds it to the graph.
 func (g *Graph) addRoute(e *CreateElement) error {
 	r := &Route{
 		Element: Element{},
@@ -340,9 +362,12 @@ func (g *Graph) addRoute(e *CreateElement) error {
 	return nil
 }
 
+// Add accepts a slice of CreateElements and a parent and attempts to add them to the graph.
+// TODO: validation should be moved into Add
 func (g *Graph) Add(elements []*CreateElement, parent *ElementID) ([]ID, error) {
 	oldIDs := make(map[ElementID]*ElementID)
 	children := make(map[ElementID]struct{})
+	imported := make(map[ElementID]struct{})
 	newIDs := []ID{}
 
 	// if a given id doesn't exist or conflicts with present elements, make a
@@ -360,6 +385,7 @@ func (g *Graph) Add(elements []*CreateElement, parent *ElementID) ([]ID, error) 
 			}
 		}
 		element.ID = &id
+		imported[id] = struct{}{}
 	}
 
 	// replace IDs
@@ -367,8 +393,8 @@ func (g *Graph) Add(elements []*CreateElement, parent *ElementID) ([]ID, error) 
 		//update all routes with new IDs
 		if element.Routes != nil {
 			for index, route := range element.Routes {
-				if _, ok := oldIDs[*route.ID]; ok {
-					element.Routes[index].ID = oldIDs[*route.ID]
+				if _, ok := oldIDs[route.ID]; ok {
+					element.Routes[index].ID = *oldIDs[route.ID]
 				}
 			}
 		}
@@ -380,7 +406,7 @@ func (g *Graph) Add(elements []*CreateElement, parent *ElementID) ([]ID, error) 
 					element.Children[index].ID = *oldIDs[child.ID]
 				}
 				// append to our list of children IDs within this import
-				children[*oldIDs[child.ID]] = struct{}{}
+				children[element.Children[index].ID] = struct{}{}
 			}
 		}
 
@@ -398,12 +424,61 @@ func (g *Graph) Add(elements []*CreateElement, parent *ElementID) ([]ID, error) 
 		}
 	}
 
-	// add to graph
-	for _, element := range elements {
+	// validate
+	for index, element := range elements {
 		if element.Type == nil {
-			return nil, errors.New("unable to import: element has no type")
+			return nil, errors.New(fmt.Sprintf("element[%d] is missing type", index))
 		}
 
+		switch *element.Type {
+		case BLOCK, SOURCE:
+			if element.Spec == nil {
+				return nil, errors.New(fmt.Sprintf("element[%d] is missing spec", index))
+			}
+			_, okBlock := g.blockLibrary[*element.Spec]
+			_, okSource := g.sourceLibrary[*element.Spec]
+			if !(okBlock || okSource) {
+				return nil, errors.New(fmt.Sprintf("element[%d] has invalid spec '%s'", index, *element.Spec))
+			}
+			fallthrough
+		case GROUP:
+			if element.Routes != nil {
+				for _, route := range element.Routes {
+					_, okImport := imported[route.ID]
+					_, okGraph := g.elements[route.ID]
+					if !(okImport || okGraph) {
+						return nil, errors.New(fmt.Sprintf("element[%d] has invalid route '%s'", index, route.ID))
+					}
+				}
+			}
+			if element.Children != nil {
+				for _, child := range element.Children {
+					_, okImport := imported[child.ID]
+					_, okGraph := g.elements[child.ID]
+					if !(okImport || okGraph) {
+						return nil, errors.New(fmt.Sprintf("element[%d] has invalid child '%s'", index, child.ID))
+					}
+				}
+			}
+		case LINK, CONNECTION:
+			if element.SourceID == nil || element.TargetID == nil {
+				return nil, errors.New(fmt.Sprintf("element[%d] is missing source or target IDs", index))
+			}
+			_, okImported := imported[*element.SourceID]
+			_, okGraph := g.elements[*element.SourceID]
+			if !(okImported || okGraph) {
+				return nil, errors.New(fmt.Sprintf("element[%d] has invalid source node '%s'", index, *element.SourceID))
+			}
+			_, okImported = imported[*element.TargetID]
+			_, okGraph = g.elements[*element.TargetID]
+			if !(okImported || okGraph) {
+				return nil, errors.New(fmt.Sprintf("element[%d] has invalid target node '%s'", index, *element.TargetID))
+			}
+		}
+	}
+
+	// add to graph
+	for _, element := range elements {
 		var err error
 		var ids []ID
 		switch *element.Type {

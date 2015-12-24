@@ -161,14 +161,10 @@ type CreateElement struct {
 	Spec      *string        `json:"spec"`
 	Alias     *string        `json:"alias"`
 	Position  *Position      `json:"position"`
-	Routes    []struct {
-		ID     *ElementID `json:"id"`
-		Hidden *bool      `json:"hidden"`
-		Alias  *string    `json:"alias"`
-	} `json:"routes"`
-	Children []ID
-	SourceID *ElementID `json:"source_id"`
-	TargetID *ElementID `json:"target_id"`
+	Routes    []GroupRoute   `json:"routes"`
+	Children  []ID           `json:"children"`
+	SourceID  *ElementID     `json:"source_id"`
+	TargetID  *ElementID     `json:"target_id"`
 }
 
 type UpdateElement struct {
