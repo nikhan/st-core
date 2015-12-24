@@ -9,13 +9,13 @@ func ref(c string) *string {
 func TestAdd(t *testing.T) {
 	g := NewGraph()
 
-	// should fail: element has no type
+	// should error: element has no type
 	_, err := g.Add([]*CreateElement{&CreateElement{}}, nil)
 	if err == nil {
 		t.Error("expected error")
 	}
 
-	// should fail: block as no spec
+	// should error: block as no spec
 	_, err = g.Add([]*CreateElement{&CreateElement{
 		Type: ref(BLOCK),
 	}}, nil)
@@ -23,7 +23,7 @@ func TestAdd(t *testing.T) {
 		t.Error("expected error")
 	}
 
-	// should fail: source has no spec
+	// should error: source has no spec
 	_, err = g.Add([]*CreateElement{&CreateElement{
 		Type: ref(SOURCE),
 	}}, nil)
@@ -75,13 +75,64 @@ func TestAdd(t *testing.T) {
 		t.Error("error adding block")
 	}
 
-	// create value source
+	// should error: create connection no source or target
+	_, err = g.Add([]*CreateElement{&CreateElement{
+		Type: ref(CONNECTION),
+	}}, nil)
+	if err == nil {
+		t.Error("expected error ")
+	}
+
+	// should error: create connection no source or target
+	_, err = g.Add([]*CreateElement{&CreateElement{
+		Type: ref(LINK),
+	}}, nil)
+	if err == nil {
+		t.Error("expected error ")
+	}
+
+	// connect routes
+	source := ElementID("12")
+	target := ElementID("11")
+	_, err = g.Add([]*CreateElement{&CreateElement{
+		Type:     ref(CONNECTION),
+		SourceID: &source,
+		TargetID: &target,
+	}}, nil)
+	if err != nil {
+		t.Error("error adding connection")
+	}
+
+	// link routes
+	_, err = g.Add([]*CreateElement{&CreateElement{
+		Type: ref(BLOCK),
+		Spec: ref("valueGet"),
+	}}, nil)
+	if err != nil {
+		t.Error("error adding block")
+	}
+
 	_, err = g.Add([]*CreateElement{&CreateElement{
 		Type: ref(SOURCE),
 		Spec: ref("value"),
 	}}, nil)
 	if err != nil {
-		t.Error("error adding source")
+		t.Error("expected error")
 	}
 
+	source = ElementID("22")
+	target = ElementID("24")
+	_, err = g.Add([]*CreateElement{&CreateElement{
+		Type:     ref(LINK),
+		SourceID: &source,
+		TargetID: &target,
+	}}, nil)
+	if err != nil {
+		t.Error("error add link")
+	}
+
+	// print graph status
+	//resp, _ := g.Get()
+	//o, _ := json.Marshal(resp)
+	//fmt.Println(string(o))
 }
