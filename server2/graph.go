@@ -342,6 +342,7 @@ func (g *Graph) addRoute(e *CreateElement) error {
 
 func (g *Graph) Add(elements []*CreateElement, parent *ElementID) ([]ID, error) {
 	oldIDs := make(map[ElementID]*ElementID)
+	children := make(map[ElementID]struct{})
 	newIDs := []ID{}
 
 	// if a given id doesn't exist or conflicts with present elements, make a
@@ -361,7 +362,7 @@ func (g *Graph) Add(elements []*CreateElement, parent *ElementID) ([]ID, error) 
 		element.ID = &id
 	}
 
-	// replace IDs and add to graph.
+	// replace IDs
 	for _, element := range elements {
 		//update all routes with new IDs
 		if element.Routes != nil {
@@ -378,6 +379,8 @@ func (g *Graph) Add(elements []*CreateElement, parent *ElementID) ([]ID, error) 
 				if _, ok := oldIDs[child.ID]; ok {
 					element.Children[index].ID = *oldIDs[child.ID]
 				}
+				// append to our list of children IDs within this import
+				children[*oldIDs[child.ID]] = struct{}{}
 			}
 		}
 
@@ -393,7 +396,10 @@ func (g *Graph) Add(elements []*CreateElement, parent *ElementID) ([]ID, error) 
 				element.TargetID = oldIDs[*element.TargetID]
 			}
 		}
+	}
 
+	// add to graph
+	for _, element := range elements {
 		if element.Type == nil {
 			return nil, errors.New("unable to import: element has no type")
 		}
@@ -436,6 +442,17 @@ func (g *Graph) Add(elements []*CreateElement, parent *ElementID) ([]ID, error) 
 					X: 0,
 					Y: 0,
 				})
+			}
+			// if:
+			// element is a node,
+			// element's ID is not in the children set for this import,
+			// we are given a parent ID
+			// then: make this node a child of given parent
+			if _, ok := children[*element.ID]; parent != nil && !ok {
+				err := g.addChild(*parent, *element.ID)
+				if err != nil {
+					return nil, err
+				}
 			}
 		}
 

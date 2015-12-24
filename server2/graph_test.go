@@ -1,9 +1,19 @@
 package stserver
 
-import "testing"
+import (
+	"encoding/json"
+	"fmt"
+	"testing"
+)
 
 func ref(c string) *string {
 	return &c
+}
+
+func printGraph(g *Graph) {
+	resp, _ := g.Get()
+	o, _ := json.Marshal(resp)
+	fmt.Println(string(o))
 }
 
 func TestAdd(t *testing.T) {
@@ -128,11 +138,39 @@ func TestAdd(t *testing.T) {
 		TargetID: &target,
 	}}, nil)
 	if err != nil {
-		t.Error("error add link")
+		t.Error("error adding link")
+	}
+}
+
+func TestParent(t *testing.T) {
+
+}
+
+func TestPattern(t *testing.T) {
+	g := NewGraph()
+
+	first := ElementID("100")
+	latch := ElementID("200")
+	_, err := g.Add([]*CreateElement{
+		&CreateElement{
+			Type: ref(BLOCK),
+			Spec: ref("first"),
+			ID:   &first,
+		},
+		&CreateElement{
+			Type: ref(BLOCK),
+			Spec: ref("latch"),
+			ID:   &latch,
+		},
+		&CreateElement{
+			Type:     ref(GROUP),
+			Children: []ID{ID{first}, ID{latch}},
+		},
+	}, nil)
+
+	if err != nil {
+		t.Error("error creating blocks")
 	}
 
-	// print graph status
-	//resp, _ := g.Get()
-	//o, _ := json.Marshal(resp)
-	//fmt.Println(string(o))
+	printGraph(g)
 }
