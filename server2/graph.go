@@ -3,6 +3,7 @@ package stserver
 import (
 	"errors"
 	"fmt"
+	"log"
 	"strconv"
 	"sync"
 
@@ -55,32 +56,27 @@ func (g *Graph) addRoutesFromPins(pins []core.Pin, direction string) ([]ID, erro
 // addBlock initializes a core.Block and adds a Block to the graph.
 // If addBlock receives a Block with no routes, it will automatically generate them from the corresponding core.Spec.
 // If addBlock receives a Block with routes, it will assume that those routes have already been created.
-func (g *Graph) addBlock(e *CreateElement) ([]ID, error) {
+func (g *Graph) addBlock(e *CreateElement) []ID {
 	var newIDs []ID
 	b := &Block{
 		Element: Element{},
+		Spec:    *e.Spec,
 	}
 
-	if e.Spec == nil {
-		return nil, errors.New("block has no spec!")
-	}
-
-	b.Spec = *e.Spec
-	spec, ok := g.blockLibrary[b.Spec]
-	if !ok {
-		return nil, errors.New(fmt.Sprintf("could not create spec %s: does not exist"))
-	}
+	spec := g.blockLibrary[b.Spec]
 
 	if e.Routes == nil {
 		// no routes were sent with this block
 		// that means we need to create them.
 		inputs, err := g.addRoutesFromPins(spec.Inputs, INPUT)
 		if err != nil {
-			return nil, err
+			// if we get here something is very wrong.
+			log.Fatal(err)
 		}
 		outputs, err := g.addRoutesFromPins(spec.Outputs, OUTPUT)
 		if err != nil {
-			return nil, err
+			// if we get here something is very wrong.
+			log.Fatal(err)
 		}
 		newIDs = append(inputs, outputs...)
 		b.Routes = newIDs
@@ -91,27 +87,42 @@ func (g *Graph) addBlock(e *CreateElement) ([]ID, error) {
 		}
 	}
 
+	// add a source route if this block needs a source
+	if e.Source != nil {
+		elementType := ROUTE
+		elementDirection := INPUT
+		elementJSONType := core.ANY
+		shit := "shit"
+		elements := []*CreateElement{&CreateElement{
+			Type:      &elementType,
+			Name:      &g.sourceLibrary[spec.Source].Name,
+			JSONType:  &elementJSONType,
+			Direction: &elementDirection,
+			Source:    &g.sourceLibrary[spec.Source].Type,
+		}}
+		sourceID, err := g.Add(elements, nil)
+		fmt.Println("Hello????")
+		if err != nil {
+			// if we get here something is very wrong.
+			log.Fatal(err)
+		}
+		newIDs = append(newIDs, sourceID[0])
+	}
+
 	g.elements[*e.ID] = b
-	return newIDs, nil
+	return newIDs
 }
 
 // addSource initializes a core.Source and adds a Source to the graph.
 // TODO: addSource always adds a route to the graph regardless of whether or not the imported Source has one.
 // addSource should function similar to addBlock, and only create a new route if the imported Source does not have one.
-func (g *Graph) addSource(e *CreateElement) ([]ID, error) {
+func (g *Graph) addSource(e *CreateElement) []ID {
 	s := &Source{
 		Element: Element{},
+		Spec:    *e.Spec,
 	}
 
-	if e.Spec == nil {
-		return nil, errors.New("source has no spec!")
-	}
-
-	s.Spec = *e.Spec
-	spec, ok := g.sourceLibrary[s.Spec]
-	if !ok {
-		return nil, errors.New(fmt.Sprintf("could not create spec %s: does not exist"))
-	}
+	spec := g.sourceLibrary[s.Spec]
 
 	elementType := ROUTE
 	elementDirection := OUTPUT
@@ -121,17 +132,18 @@ func (g *Graph) addSource(e *CreateElement) ([]ID, error) {
 		Name:      &spec.Name,
 		JSONType:  &elementJSONType,
 		Direction: &elementDirection,
-		Source:    &spec.Name,
+		Source:    &spec.Type,
 	}}
 
 	newIDs, err := g.Add(elements, nil)
 	if err != nil {
-		return nil, err
+		// if we get here something is very wrong.
+		log.Fatal(err)
 	}
 
 	s.Routes = newIDs
 	g.elements[*e.ID] = s
-	return newIDs, nil
+	return newIDs
 }
 
 func (g *Graph) addRouteAscending(parent ElementID, route ElementID) error {
@@ -201,49 +213,23 @@ func (g *Graph) deleteRouteAscending(parent ElementID, route ElementID) error {
 // addChild adds a child to a group.
 // addChild automatically adds all routes from that child to that group and its parents.
 // TODO: addChild should update g.elementParent
-func (g *Graph) addChild(parent ElementID, child ElementID) error {
-	err := g.validateIDs(parent, child)
-	if err != nil {
-		return err
-	}
-
-	group, ok := g.elements[parent].(*Group)
-	if !ok {
-		return errors.New(fmt.Sprintf("%s not a group", parent))
-	}
-
-	node, ok := g.elements[child].(Nodes)
-	if !ok {
-		return errors.New(fmt.Sprintf("could not add child %s, not a node", child))
-	}
-
+func (g *Graph) addChild(parent ElementID, child ElementID) {
+	group := g.elements[parent].(*Group)
+	node := g.elements[child].(Nodes)
 	group.Children = append(group.Children, ID{child})
 	g.elementParent[child] = parent
 
 	for _, route := range node.GetRoutes() {
 		g.addRouteAscending(parent, route.ID)
 	}
-	return nil
 }
 
 // deleteChild removes a child from a group.
 // deleteChild automatically removes all routes from that group and its parents.
 // TODO: deleteChild should update g.elementParent
-func (g *Graph) deleteChild(parent ElementID, child ElementID) error {
-	err := g.validateIDs(parent, child)
-	if err != nil {
-		return err
-	}
-
-	group, ok := g.elements[parent].(*Group)
-	if !ok {
-		return errors.New(fmt.Sprintf("%s not a group", parent))
-	}
-
-	node, ok := g.elements[child].(Nodes)
-	if !ok {
-		return errors.New(fmt.Sprintf("could not add child %s, not a node", child))
-	}
+func (g *Graph) deleteChild(parent ElementID, child ElementID) {
+	group := g.elements[parent].(*Group)
+	node := g.elements[child].(Nodes)
 
 	index := -1
 	for i, c := range group.Children {
@@ -252,22 +238,16 @@ func (g *Graph) deleteChild(parent ElementID, child ElementID) error {
 		}
 	}
 
-	if index == -1 {
-		return errors.New(fmt.Sprintf("group %s does not have child %s", parent, child))
-	}
-
 	group.Children = append(group.Children[:index], group.Children[index+1:]...)
 
 	for _, route := range node.GetRoutes() {
 		g.deleteRouteAscending(parent, route.ID)
 	}
-
-	return nil
 }
 
 // addGroup adds a group to the graph.
 // If the added group has children, we automatically add those children to the new group.
-func (g *Graph) addGroup(e *CreateElement) error {
+func (g *Graph) addGroup(e *CreateElement) {
 	group := &Group{
 		Element:  Element{},
 		Children: []ID{},
@@ -278,32 +258,13 @@ func (g *Graph) addGroup(e *CreateElement) error {
 
 	if e.Children != nil {
 		for _, child := range e.Children {
-			err := g.addChild(*e.ID, child.ID)
-			if err != nil {
-				return err
-			}
+			g.addChild(*e.ID, child.ID)
 		}
 	}
-
-	return nil
-}
-
-// validateEdge ensures that all given ids exist in the graph.
-func (g *Graph) validateEdge(e *CreateElement) error {
-	if e.SourceID == nil || e.TargetID == nil {
-		return errors.New("connection missing source or target")
-	}
-
-	return g.validateIDs(ElementID(*e.SourceID), ElementID(*e.TargetID))
 }
 
 // addConnection creates a connection and adds it to the graph.
-func (g *Graph) addConnection(e *CreateElement) error {
-	err := g.validateEdge(e)
-	if err != nil {
-		return err
-	}
-
+func (g *Graph) addConnection(e *CreateElement) {
 	c := &Connection{
 		Element: Element{},
 	}
@@ -312,16 +273,10 @@ func (g *Graph) addConnection(e *CreateElement) error {
 	c.TargetID = ElementID(*e.TargetID)
 
 	g.elements[*e.ID] = c
-	return nil
 }
 
 // addLink creates a link and adds it to the graph.
-func (g *Graph) addLink(e *CreateElement) error {
-	err := g.validateEdge(e)
-	if err != nil {
-		return err
-	}
-
+func (g *Graph) addLink(e *CreateElement) {
 	l := &Link{
 		Element: Element{},
 	}
@@ -330,25 +285,12 @@ func (g *Graph) addLink(e *CreateElement) error {
 	l.TargetID = ElementID(*e.TargetID)
 
 	g.elements[*e.ID] = l
-	return nil
 }
 
 // addRoute creates a route and adds it to the graph.
-func (g *Graph) addRoute(e *CreateElement) error {
+func (g *Graph) addRoute(e *CreateElement) {
 	r := &Route{
 		Element: Element{},
-	}
-
-	if e.JSONType == nil {
-		return errors.New("could not create route, no JSONType found")
-	}
-
-	if e.Direction == nil {
-		return errors.New("could not create route, no Direction found")
-	}
-
-	if e.Name == nil {
-		return errors.New("could not create route, no Name")
 	}
 
 	r.Direction = *e.Direction
@@ -359,7 +301,126 @@ func (g *Graph) addRoute(e *CreateElement) error {
 	}
 
 	g.elements[*e.ID] = r
+}
+
+func (g *Graph) validateSpec(element *CreateElement) error {
+	if element.Spec == nil {
+		return errors.New("missing spec")
+	}
+	_, okBlock := g.blockLibrary[*element.Spec]
+	_, okSource := g.sourceLibrary[*element.Spec]
+	if !(okBlock || okSource) {
+		return fmt.Errorf("invalid spec '%s'", *element.Spec)
+	}
 	return nil
+}
+
+func (g *Graph) validateRoutes(element *CreateElement, imported map[ElementID]*CreateElement) error {
+	if element.Routes != nil {
+		for _, route := range element.Routes {
+			_, okImport := imported[route.ID]
+			_, okGraph := g.elements[route.ID]
+			if !(okImport || okGraph) {
+				return fmt.Errorf("invalid route '%s'", route.ID)
+			}
+		}
+	}
+	return nil
+}
+
+func (g *Graph) validateChildren(element *CreateElement, imported map[ElementID]*CreateElement) error {
+	if element.Children != nil {
+		for _, child := range element.Children {
+			_, okImport := imported[child.ID]
+			if okImport {
+				if !(*imported[child.ID].Type == BLOCK ||
+					*imported[child.ID].Type == SOURCE ||
+					*imported[child.ID].Type == GROUP) {
+					return fmt.Errorf("invalid child '%s' not a node (block, source, group)", child.ID)
+				}
+			}
+			_, okGraph := g.elements[child.ID]
+			if okGraph {
+				if _, ok := g.elements[child.ID].(Nodes); !ok {
+					fmt.Errorf("invalid child '%s' not a node (block, sourc, group)", child.ID)
+				}
+			}
+
+			if !(okImport || okGraph) {
+				return fmt.Errorf("invalid child '%s' does not exist", child.ID)
+			}
+		}
+	}
+	return nil
+}
+
+func (g *Graph) validateSources(element *CreateElement, imported map[ElementID]*CreateElement) error {
+	var sourceSource string
+	var targetSource string
+	if _, ok := g.elements[*element.SourceID]; ok {
+		sourceSource = g.elements[*element.SourceID].(*Route).Source
+	}
+	if _, ok := g.elements[*element.TargetID]; ok {
+		targetSource = g.elements[*element.TargetID].(*Route).Source
+	}
+	if _, ok := imported[*element.SourceID]; ok {
+		sourceSource = *imported[*element.SourceID].Source
+	}
+	if _, ok := imported[*element.TargetID]; ok {
+		targetSource = *imported[*element.TargetID].Source
+	}
+
+	if len(sourceSource) == 0 && len(targetSource) == 0 {
+		return fmt.Errorf("link has no source types")
+	}
+
+	if sourceSource != targetSource {
+		return fmt.Errorf("source '%s' is not compatible with target '%s'", sourceSource, targetSource)
+	}
+	return nil
+}
+
+// TODO: check to make sure source links are compatible... ( same type of source )
+func (g *Graph) validateEdge(element *CreateElement, imported map[ElementID]*CreateElement) error {
+	if element.SourceID == nil {
+		return errors.New("missing Source ID")
+	}
+
+	if element.TargetID == nil {
+		return errors.New("missing Target ID")
+	}
+
+	_, okImported := imported[*element.SourceID]
+	_, okGraph := g.elements[*element.SourceID]
+	if !(okImported || okGraph) {
+		return fmt.Errorf("invalid source node '%s'", *element.SourceID)
+	}
+	_, okImported = imported[*element.TargetID]
+	_, okGraph = g.elements[*element.TargetID]
+	if !(okImported || okGraph) {
+		return fmt.Errorf("invalid target node '%s'", *element.TargetID)
+	}
+	return nil
+}
+
+func (g *Graph) validateRoute(element *CreateElement) error {
+	if element.JSONType == nil {
+		return errors.New("could not create route, no JSONType found")
+	}
+
+	if element.Direction == nil {
+		return errors.New("could not create route, no Direction found")
+	}
+
+	if element.Name == nil {
+		return errors.New("could not create route, no Name")
+	}
+
+	return nil
+}
+
+func validationError(index int, err error) error {
+	return fmt.Errorf("element[%d] has error: %s", index, err.Error())
 }
 
 // Add accepts a slice of CreateElements and a parent and attempts to add them to the graph.
@@ -367,7 +428,7 @@ func (g *Graph) addRoute(e *CreateElement) error {
 func (g *Graph) Add(elements []*CreateElement, parent *ElementID) ([]ID, error) {
 	oldIDs := make(map[ElementID]*ElementID)
 	children := make(map[ElementID]struct{})
-	imported := make(map[ElementID]struct{})
+	imported := make(map[ElementID]*CreateElement)
 	newIDs := []ID{}
 
 	// if a given id doesn't exist or conflicts with present elements, make a
@@ -385,7 +446,7 @@ func (g *Graph) Add(elements []*CreateElement, parent *ElementID) ([]ID, error) 
 			}
 		}
 		element.ID = &id
-		imported[id] = struct{}{}
+		imported[id] = element
 	}
 
 	// replace IDs
@@ -424,82 +485,82 @@ func (g *Graph) Add(elements []*CreateElement, parent *ElementID) ([]ID, error) 
 		}
 	}
 
-	// validate
+	// validate parent
+	if parent != nil {
+		if _, ok := g.elements[*parent]; !ok {
+			return nil, fmt.Errorf("invalid parent: %s", *parent)
+		}
+
+		if _, ok := g.elements[*parent].(*Group); !ok {
+			return nil, fmt.Errorf("invalid parent: %s - not a group", *parent)
+		}
+	}
+
+	// validate imported pattern
 	for index, element := range elements {
 		if element.Type == nil {
-			return nil, errors.New(fmt.Sprintf("element[%d] is missing type", index))
+			return nil, validationError(index, errors.New("missing type"))
 		}
 
 		switch *element.Type {
 		case BLOCK, SOURCE:
-			if element.Spec == nil {
-				return nil, errors.New(fmt.Sprintf("element[%d] is missing spec", index))
+			err := g.validateSpec(element)
+			if err != nil {
+				return nil, validationError(index, err)
 			}
-			_, okBlock := g.blockLibrary[*element.Spec]
-			_, okSource := g.sourceLibrary[*element.Spec]
-			if !(okBlock || okSource) {
-				return nil, errors.New(fmt.Sprintf("element[%d] has invalid spec '%s'", index, *element.Spec))
+			err = g.validateRoutes(element, imported)
+			if err != nil {
+				return nil, validationError(index, err)
 			}
-			fallthrough
 		case GROUP:
-			if element.Routes != nil {
-				for _, route := range element.Routes {
-					_, okImport := imported[route.ID]
-					_, okGraph := g.elements[route.ID]
-					if !(okImport || okGraph) {
-						return nil, errors.New(fmt.Sprintf("element[%d] has invalid route '%s'", index, route.ID))
-					}
-				}
+			err := g.validateRoutes(element, imported)
+			if err != nil {
+				return nil, validationError(index, err)
 			}
-			if element.Children != nil {
-				for _, child := range element.Children {
-					_, okImport := imported[child.ID]
-					_, okGraph := g.elements[child.ID]
-					if !(okImport || okGraph) {
-						return nil, errors.New(fmt.Sprintf("element[%d] has invalid child '%s'", index, child.ID))
-					}
-				}
+			err = g.validateChildren(element, imported)
+			if err != nil {
+				return nil, validationError(index, err)
 			}
-		case LINK, CONNECTION:
-			if element.SourceID == nil || element.TargetID == nil {
-				return nil, errors.New(fmt.Sprintf("element[%d] is missing source or target IDs", index))
+		case ROUTE:
+			err := g.validateRoute(element)
+			if err != nil {
+				return nil, validationError(index, err)
 			}
-			_, okImported := imported[*element.SourceID]
-			_, okGraph := g.elements[*element.SourceID]
-			if !(okImported || okGraph) {
-				return nil, errors.New(fmt.Sprintf("element[%d] has invalid source node '%s'", index, *element.SourceID))
+		case LINK:
+			err := g.validateEdge(element, imported)
+			if err != nil {
+				return nil, validationError(index, err)
 			}
-			_, okImported = imported[*element.TargetID]
-			_, okGraph = g.elements[*element.TargetID]
-			if !(okImported || okGraph) {
-				return nil, errors.New(fmt.Sprintf("element[%d] has invalid target node '%s'", index, *element.TargetID))
+			err = g.validateSources(element, imported)
+			if err != nil {
+				return nil, validationError(index, err)
 			}
+		case CONNECTION:
+			err := g.validateEdge(element, imported)
+			if err != nil {
+				return nil, validationError(index, err)
+			}
+		default:
+			return nil, validationError(index, fmt.Errorf("unknown type %s", *element.Type))
 		}
 	}
 
 	// add to graph
 	for _, element := range elements {
-		var err error
 		var ids []ID
 		switch *element.Type {
 		case BLOCK:
-			ids, err = g.addBlock(element)
+			ids = g.addBlock(element)
 		case SOURCE:
-			ids, err = g.addSource(element)
+			ids = g.addSource(element)
 		case GROUP:
-			err = g.addGroup(element)
+			g.addGroup(element)
 		case CONNECTION:
-			err = g.addConnection(element)
+			g.addConnection(element)
 		case LINK:
-			err = g.addLink(element)
+			g.addLink(element)
 		case ROUTE:
-			err = g.addRoute(element)
-		default:
-			err = errors.New(fmt.Sprintf("unable to import unknown type %s", *element.Type))
-		}
-
-		if err != nil {
-			return nil, err
+			g.addRoute(element)
 		}
 
 		g.elements[*element.ID].SetID(*element.ID)
@@ -518,16 +579,9 @@ func (g *Graph) Add(elements []*CreateElement, parent *ElementID) ([]ID, error) 
 					Y: 0,
 				})
 			}
-			// if:
-			// element is a node,
-			// element's ID is not in the children set for this import,
-			// we are given a parent ID
-			// then: make this node a child of given parent
+
 			if _, ok := children[*element.ID]; parent != nil && !ok {
-				err := g.addChild(*parent, *element.ID)
-				if err != nil {
-					return nil, err
-				}
+				g.addChild(*parent, *element.ID)
 			}
 		}
 
