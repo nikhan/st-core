@@ -84,8 +84,47 @@ func UpdateHandler(inner http.Handler) http.Handler {
 	return BodyHandler(inner, UpdateElement{})
 }
 
-func BatchHandler(inner http.Handler) http.Handler {
-	return BodyHandler(inner, []ElementID{})
+func QueryIDHandler(inner http.Handler) http.Handler {
+	return BatchQueryHandler(inner)
+}
+
+func QueryTranslateHandler(inner http.Handler) http.Handler {
+	return BatchQueryHandler(inner, "x", "y")
+}
+
+func BatchQueryHandler(inner http.Handler, keys ...string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		for _, key := range keys {
+			value, ok := r.URL.Query()[key]
+			if !ok {
+				WriteError(w, ErrBadRequest)
+				return
+			}
+
+			if len(value) == 1 {
+				context.Set(r, key, value[0])
+			} else {
+				context.Set(r, key, value)
+			}
+		}
+
+		ids, ok := r.URL.Query()["id"]
+		if !ok {
+			WriteError(w, ErrBadRequest)
+			return
+		}
+
+		eids := make([]ElementID, len(ids))
+		for i, id := range ids {
+			eids[i] = ElementID(id)
+		}
+
+		context.Set(r, "ids", eids)
+
+		if inner != nil {
+			inner.ServeHTTP(w, r)
+		}
+	})
 }
 
 func RecoverHandler(inner http.Handler) http.Handler {

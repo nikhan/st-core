@@ -154,14 +154,9 @@ func (s *Server) LibraryHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) TranslateElementsHandler(w http.ResponseWriter, r *http.Request) {
-	ids := context.Get(r, "body").([]ElementID)
-
-	s.graph.Lock()
-	defer s.graph.Unlock()
-
-	xs := r.URL.Query().Get("x")
-	ys := r.URL.Query().Get("y")
-	// need error checking
+	ids := context.Get(r, "ids").([]ElementID)
+	xs := context.Get(r, "x").(string)
+	ys := context.Get(r, "y").(string)
 
 	x, err := strconv.Atoi(xs)
 	if err != nil {
@@ -173,13 +168,16 @@ func (s *Server) TranslateElementsHandler(w http.ResponseWriter, r *http.Request
 		panic(err)
 	}
 
+	s.graph.Lock()
+	defer s.graph.Unlock()
+
 	if err = s.graph.BatchTranslate(ids, x, y); err != nil {
 		panic(err)
 	}
 }
 
 func (s *Server) DeleteElementsHandler(w http.ResponseWriter, r *http.Request) {
-	ids := context.Get(r, "body").([]ElementID)
+	ids := context.Get(r, "ids").([]ElementID)
 
 	s.graph.Lock()
 	defer s.graph.Unlock()
@@ -190,7 +188,7 @@ func (s *Server) DeleteElementsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) ResetElementsHandler(w http.ResponseWriter, r *http.Request) {
-	ids := context.Get(r, "body").([]ElementID)
+	ids := context.Get(r, "ids").([]ElementID)
 
 	s.graph.Lock()
 	defer s.graph.Unlock()
@@ -201,7 +199,7 @@ func (s *Server) ResetElementsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) UngroupElementsHandler(w http.ResponseWriter, r *http.Request) {
-	ids := context.Get(r, "body").([]ElementID)
+	ids := context.Get(r, "ids").([]ElementID)
 
 	s.graph.Lock()
 	defer s.graph.Unlock()
@@ -302,7 +300,7 @@ func (s *Server) NewRouter() *mux.Router {
 			"PUT",
 			[]string{"action", "translate"},
 			s.TranslateElementsHandler,
-			[]Handler{RecoverHandler, BatchHandler},
+			[]Handler{RecoverHandler, QueryTranslateHandler},
 		},
 		Endpoint{
 			"DeleteElements",
@@ -310,7 +308,7 @@ func (s *Server) NewRouter() *mux.Router {
 			"PUT",
 			[]string{"action", "delete"},
 			s.DeleteElementsHandler,
-			[]Handler{RecoverHandler, BatchHandler},
+			[]Handler{RecoverHandler, QueryIDHandler},
 		},
 		Endpoint{
 			"UngroupElements",
@@ -318,7 +316,7 @@ func (s *Server) NewRouter() *mux.Router {
 			"PUT",
 			[]string{"action", "ungroup"},
 			s.UngroupElementsHandler,
-			[]Handler{RecoverHandler, BatchHandler},
+			[]Handler{RecoverHandler, QueryIDHandler},
 		},
 		Endpoint{
 			"ResetElements",
@@ -326,7 +324,7 @@ func (s *Server) NewRouter() *mux.Router {
 			"PUT",
 			[]string{"action", "reset"},
 			s.ResetElementsHandler,
-			[]Handler{RecoverHandler, BatchHandler},
+			[]Handler{RecoverHandler, QueryIDHandler},
 		},
 		Endpoint{
 			"GetElements",
@@ -334,7 +332,7 @@ func (s *Server) NewRouter() *mux.Router {
 			"POST",
 			[]string{"action", "get"},
 			s.GetElementsHandler,
-			[]Handler{RecoverHandler, BatchHandler},
+			[]Handler{RecoverHandler, QueryIDHandler},
 		},
 		Endpoint{
 			"UpdateGroupRoute",
