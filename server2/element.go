@@ -144,27 +144,27 @@ type Connection struct {
 
 type Route struct {
 	Element
-	Name      string        `json:"name"`
-	Value     interface{}   `json:"value"`
-	Direction string        `json:"direction"`
-	Source    string        `json:"source"`
-	JSONType  core.JSONType `json:"json_type"`
+	Name      string          `json:"name"`
+	Value     interface{}     `json:"value"`
+	Direction string          `json:"direction"`
+	Source    core.SourceType `json:"source"`
+	JSONType  core.JSONType   `json:"json_type"`
 }
 
 type CreateElement struct {
-	ID        *ElementID     `json:"id"`
-	Type      *string        `json:"type"`
-	JSONType  *core.JSONType `json:"json_type"`
-	Direction *string        `json:"direction"`
-	Name      *string        `json:"name"`
-	Source    *string        `json:"source"`
-	Spec      *string        `json:"spec"`
-	Alias     *string        `json:"alias"`
-	Position  *Position      `json:"position"`
-	Routes    []GroupRoute   `json:"routes"`
-	Children  []ID           `json:"children"`
-	SourceID  *ElementID     `json:"source_id"`
-	TargetID  *ElementID     `json:"target_id"`
+	ID        *ElementID       `json:"id"`
+	Type      *string          `json:"type"`
+	JSONType  *core.JSONType   `json:"json_type"`
+	Direction *string          `json:"direction"`
+	Name      *string          `json:"name"`
+	Source    *core.SourceType `json:"source"`
+	Spec      *string          `json:"spec"`
+	Alias     *string          `json:"alias"`
+	Position  *Position        `json:"position"`
+	Routes    []GroupRoute     `json:"routes"`
+	Children  []ID             `json:"children"`
+	SourceID  *ElementID       `json:"source_id"`
+	TargetID  *ElementID       `json:"target_id"`
 }
 
 type UpdateElement struct {

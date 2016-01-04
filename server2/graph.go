@@ -1,6 +1,7 @@
 package stserver
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -79,34 +80,36 @@ func (g *Graph) addBlock(e *CreateElement) []ID {
 			log.Fatal(err)
 		}
 		newIDs = append(inputs, outputs...)
+
+		// add a source route if this block needs a source
+		if spec.Source != core.NONE {
+			// the creation of this route is obscene
+			elementType := ROUTE
+			elementDirection := INPUT
+			elementJSONType := core.ANY
+			name, _ := json.Marshal(spec.Source)
+			names := string(name)
+			elements := []*CreateElement{&CreateElement{
+				Type:      &elementType,
+				Name:      &names,
+				JSONType:  &elementJSONType,
+				Direction: &elementDirection,
+				Source:    &spec.Source,
+			}}
+
+			sourceID, err := g.Add(elements, nil)
+			if err != nil {
+				log.Fatal(err)
+			}
+			newIDs = append(newIDs, sourceID[0])
+		}
+
 		b.Routes = newIDs
 	} else {
 		b.Routes = make([]ID, len(e.Routes))
 		for i, route := range e.Routes {
 			b.Routes[i] = ID{route.ID}
 		}
-	}
-
-	// add a source route if this block needs a source
-	if e.Source != nil {
-		elementType := ROUTE
-		elementDirection := INPUT
-		elementJSONType := core.ANY
-		shit := "shit"
-		elements := []*CreateElement{&CreateElement{
-			Type:      &elementType,
-			Name:      &g.sourceLibrary[spec.Source].Name,
-			JSONType:  &elementJSONType,
-			Direction: &elementDirection,
-			Source:    &g.sourceLibrary[spec.Source].Type,
-		}}
-		sourceID, err := g.Add(elements, nil)
-		fmt.Println("Hello????")
-		if err != nil {
-			// if we get here something is very wrong.
-			log.Fatal(err)
-		}
-		newIDs = append(newIDs, sourceID[0])
 	}
 
 	g.elements[*e.ID] = b
@@ -117,6 +120,7 @@ func (g *Graph) addBlock(e *CreateElement) []ID {
 // TODO: addSource always adds a route to the graph regardless of whether or not the imported Source has one.
 // addSource should function similar to addBlock, and only create a new route if the imported Source does not have one.
 func (g *Graph) addSource(e *CreateElement) []ID {
+	var newIDs []ID
 	s := &Source{
 		Element: Element{},
 		Spec:    *e.Spec,
@@ -124,24 +128,33 @@ func (g *Graph) addSource(e *CreateElement) []ID {
 
 	spec := g.sourceLibrary[s.Spec]
 
-	elementType := ROUTE
-	elementDirection := OUTPUT
-	elementJSONType := core.ANY
-	elements := []*CreateElement{&CreateElement{
-		Type:      &elementType,
-		Name:      &spec.Name,
-		JSONType:  &elementJSONType,
-		Direction: &elementDirection,
-		Source:    &spec.Type,
-	}}
+	if e.Routes == nil {
+		elementType := ROUTE
+		elementDirection := OUTPUT
+		elementJSONType := core.ANY
 
-	newIDs, err := g.Add(elements, nil)
-	if err != nil {
-		// if we get here something is very wrong.
-		log.Fatal(err)
+		elements := []*CreateElement{&CreateElement{
+			Type:      &elementType,
+			Name:      &spec.Name,
+			JSONType:  &elementJSONType,
+			Direction: &elementDirection,
+			Source:    &spec.Type,
+		}}
+
+		var err error
+		newIDs, err = g.Add(elements, nil)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		s.Routes = newIDs
+	} else {
+		s.Routes = make([]ID, len(e.Routes))
+		for i, route := range e.Routes {
+			s.Routes[i] = ID{route.ID}
+		}
 	}
 
-	s.Routes = newIDs
 	g.elements[*e.ID] = s
 	return newIDs
 }
@@ -355,26 +368,26 @@ func (g *Graph) validateChildren(element *CreateElement, imported map[ElementID]
 }
 
 func (g *Graph) validateSources(element *CreateElement, imported map[ElementID]*CreateElement) error {
-	var sourceSource string
-	var targetSource string
+	var sourceSource *core.SourceType
+	var targetSource *core.SourceType
 	if _, ok := g.elements[*element.SourceID]; ok {
-		sourceSource = g.elements[*element.SourceID].(*Route).Source
+		sourceSource = &g.elements[*element.SourceID].(*Route).Source
 	}
 	if _, ok := g.elements[*element.TargetID]; ok {
-		targetSource = g.elements[*element.TargetID].(*Route).Source
+		targetSource = &g.elements[*element.TargetID].(*Route).Source
 	}
 	if _, ok := imported[*element.SourceID]; ok {
-		sourceSource = *imported[*element.SourceID].Source
+		sourceSource = imported[*element.SourceID].Source
 	}
 	if _, ok := imported[*element.TargetID]; ok {
-		targetSource = *imported[*element.TargetID].Source
+		targetSource = imported[*element.TargetID].Source
 	}
 
-	if len(sourceSource) == 0 && len(targetSource) == 0 {
+	if sourceSource == nil && targetSource == nil {
 		return fmt.Errorf("link has no source types")
 	}
 
-	if sourceSource != targetSource {
+	if *sourceSource != *targetSource {
 		return fmt.Errorf("source '%s' is not compatible with target '%s'", sourceSource, targetSource)
 	}
 	return nil
