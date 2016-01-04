@@ -142,15 +142,15 @@ func TestAdd(t *testing.T) {
 	}
 	fmt.Println(err)
 
-	source = ElementID("22")
-	target = ElementID("24")
+	source = ElementID("25")
+	target = ElementID("23")
 	_, err = g.Add([]*CreateElement{&CreateElement{
 		Type:     ref(LINK),
 		SourceID: &source,
 		TargetID: &target,
 	}}, nil)
 	if err != nil {
-		t.Error("error adding link")
+		t.Error(err)
 	}
 	fmt.Println(err)
 
@@ -213,6 +213,19 @@ func TestAdd(t *testing.T) {
 		t.Error("expected error")
 	}
 	fmt.Println(err)
+
+	elements, err := g.Get()
+	if err != nil {
+		t.Error(err)
+	}
+	ids := make([]ElementID, len(elements))
+	for i, e := range elements {
+		ids[i] = e.GetID()
+	}
+	err = g.BatchDelete(ids)
+	if err != nil {
+		t.Error(err)
+	}
 }
 
 func TestParent(t *testing.T) {

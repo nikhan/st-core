@@ -84,6 +84,7 @@ func (g *Graph) addBlock(e *CreateElement) []ID {
 		// add a source route if this block needs a source
 		if spec.Source != core.NONE {
 			// the creation of this route is obscene
+			// core.Source should really just be a string
 			elementType := ROUTE
 			elementDirection := INPUT
 			elementJSONType := core.ANY
@@ -404,15 +405,40 @@ func (g *Graph) validateEdge(element *CreateElement, imported map[ElementID]*Cre
 	}
 
 	_, okImported := imported[*element.SourceID]
+	if okImported {
+		if *imported[*element.SourceID].Type != ROUTE {
+			return fmt.Errorf("invalid source node '%s'", *element.SourceID)
+		}
+	}
+
 	_, okGraph := g.elements[*element.SourceID]
-	if !(okImported || okGraph) {
-		return fmt.Errorf("invalid source node '%s'", *element.SourceID)
+	if okGraph {
+		if _, ok := g.elements[*element.SourceID].(*Route); !ok {
+			return fmt.Errorf("invalid source node '%s'", *element.SourceID)
+		}
 	}
+
+	if !(okImported || okGraph) {
+		return fmt.Errorf("missing source node '%s'", *element.SourceID)
+	}
+
 	_, okImported = imported[*element.TargetID]
-	_, okGraph = g.elements[*element.TargetID]
-	if !(okImported || okGraph) {
-		return fmt.Errorf("invalid target node '%s'", *element.TargetID)
+	if okImported {
+		if *imported[*element.TargetID].Type != ROUTE {
+			fmt.Errorf("invalid target node '%s'", *element.TargetID)
+		}
 	}
+	_, okGraph = g.elements[*element.TargetID]
+	if okGraph {
+		if _, ok := g.elements[*element.TargetID].(*Route); !ok {
+			return fmt.Errorf("invalid target node '%s'", *element.TargetID)
+		}
+	}
+
+	if !(okImported || okGraph) {
+		return fmt.Errorf("missing target node '%s'", *element.TargetID)
+	}
+
 	return nil
 }
 
