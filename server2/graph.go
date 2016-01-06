@@ -15,6 +15,7 @@ type Graph struct {
 	sync.Mutex
 	elements      map[ElementID]Elements
 	elementParent map[ElementID]ElementID
+	routeToEdge   map[ElementID]map[Elements]struct{}
 	Changes       chan interface{}
 	index         int64
 	blockLibrary  map[string]core.Spec
@@ -26,6 +27,7 @@ func NewGraph() *Graph {
 	return &Graph{
 		elements:      make(map[ElementID]Elements),
 		elementParent: make(map[ElementID]ElementID),
+		routeToEdge:   make(map[ElementID]map[Elements]struct{}),
 		Changes:       make(chan interface{}),
 		index:         0,
 		blockLibrary:  core.GetLibrary(),
@@ -286,6 +288,9 @@ func (g *Graph) addConnection(e *CreateElement) {
 	c.SourceID = ElementID(*e.SourceID)
 	c.TargetID = ElementID(*e.TargetID)
 
+	g.routeToEdge[*e.SourceID][c] = struct{}{}
+	g.routeToEdge[*e.TargetID][c] = struct{}{}
+	fmt.Println(g.routeToEdge[*e.SourceID])
 	g.elements[*e.ID] = c
 }
 
@@ -297,6 +302,9 @@ func (g *Graph) addLink(e *CreateElement) {
 
 	l.SourceID = ElementID(*e.SourceID)
 	l.TargetID = ElementID(*e.TargetID)
+
+	g.routeToEdge[*e.SourceID][l] = struct{}{}
+	g.routeToEdge[*e.TargetID][l] = struct{}{}
 
 	g.elements[*e.ID] = l
 }
@@ -314,6 +322,7 @@ func (g *Graph) addRoute(e *CreateElement) {
 		r.Source = *e.Source
 	}
 
+	g.routeToEdge[r.ID] = make(map[Elements]struct{})
 	g.elements[*e.ID] = r
 }
 
@@ -634,12 +643,44 @@ func (g *Graph) Add(elements []*CreateElement, parent *ElementID) ([]ID, error) 
 	return newIDs, nil
 }
 
+func (g *Graph) recurseGetElements(id ElementID) ([]Elements, map[Elements]struct{}) {
+	elements := []Elements{}
+	connections := make(map[Elements]struct{})
+
+	if group, ok := g.elements[id].(*Group); ok {
+		for _, child := range group.Children {
+			childElements, childConnections := g.recurseGetElements(child.ID)
+			elements = append(elements, childElements...)
+			for conn, _ := range childConnections {
+				connections[conn] = struct{}{}
+			}
+		}
+	} else if node, ok := g.elements[id].(Nodes); ok {
+		for _, id := range node.GetRoutes() {
+			elements = append(elements, g.elements[id.ID])
+			fmt.Println(g.routeToEdge[id.ID], "????")
+			for conn, _ := range g.routeToEdge[id.ID] {
+				connections[conn] = struct{}{}
+			}
+		}
+	}
+
+	elements = append(elements, g.elements[id])
+	return elements, connections
+}
+
 func (g *Graph) Get(ids ...ElementID) ([]Elements, error) {
 	elements := []Elements{}
 
 	if len(ids) == 0 {
 		for _, e := range g.elements {
 			elements = append(elements, e)
+		}
+	} else {
+		for _, id := range ids {
+			e, c := g.recurseGetElements(id)
+			elements = append(elements, e...)
+			fmt.Println("HELLO, ", c)
 		}
 	}
 
