@@ -1,12 +1,6 @@
 package stserver
 
-import (
-	"encoding/json"
-	"fmt"
-	"testing"
-)
-
-func ref(c string) *string {
+/*func ref(c string) *string {
 	return &c
 }
 
@@ -259,4 +253,4 @@ func TestPattern(t *testing.T) {
 	}
 
 	printGraph(g)
-}
+}*/

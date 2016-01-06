@@ -43,7 +43,7 @@ func VarHandler(inner http.Handler, key string) http.Handler {
 		}
 
 		if inner != nil {
-			context.Set(r, key, val)
+			context.Set(r, key, ElementID(val))
 			inner.ServeHTTP(w, r)
 		}
 	})

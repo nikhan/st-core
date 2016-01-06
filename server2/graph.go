@@ -669,6 +669,10 @@ func (g *Graph) Update(id ElementID, update *UpdateElement) error {
 		return err
 	}
 
+	if route, ok := g.elements[id].(*Route); update.Value != nil && ok {
+		route.Value = update.Value
+	}
+
 	return nil
 }
 
@@ -681,7 +685,7 @@ func (g *Graph) UpdateGroupRoute(id ElementID, routeID ElementID, update *Update
 	group := g.elements[id].(*Group)
 	route, ok := group.GetRoute(routeID)
 	if !ok {
-		return errors.New(fmt.Sprintf("could not find route %s on group %s", id, routeID))
+		return errors.New(fmt.Sprintf("could not find route '%s' on group '%s'", routeID, id))
 	}
 
 	if update.Alias != nil {

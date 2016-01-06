@@ -144,11 +144,11 @@ type Connection struct {
 
 type Route struct {
 	Element
-	Name      string          `json:"name"`
-	Value     interface{}     `json:"value"`
-	Direction string          `json:"direction"`
-	Source    core.SourceType `json:"source"`
-	JSONType  core.JSONType   `json:"json_type"`
+	Name      string           `json:"name"`
+	Value     *core.InputValue `json:"value"`
+	Direction string           `json:"direction"`
+	Source    core.SourceType  `json:"source"`
+	JSONType  core.JSONType    `json:"json_type"`
 }
 
 type CreateElement struct {
@@ -168,8 +168,8 @@ type CreateElement struct {
 }
 
 type UpdateElement struct {
-	Alias    *string     `json:"alias"`
-	Position *Position   `json:"position"`
-	Value    interface{} `json:"value"`
-	Hidden   *bool       `json:"hidden"`
+	Alias    *string          `json:"alias"`
+	Position *Position        `json:"position"`
+	Value    *core.InputValue `json:"value"`
+	Hidden   *bool            `json:"hidden"`
 }
