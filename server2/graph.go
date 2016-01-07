@@ -15,7 +15,7 @@ type Graph struct {
 	sync.Mutex
 	elements      map[ElementID]Elements
 	elementParent map[ElementID]ElementID
-	routeToEdge   map[ElementID]map[Elements]struct{}
+	routeToEdge   map[ElementID]map[Edges]struct{}
 	Changes       chan interface{}
 	index         int64
 	blockLibrary  map[string]core.Spec
@@ -27,7 +27,7 @@ func NewGraph() *Graph {
 	return &Graph{
 		elements:      make(map[ElementID]Elements),
 		elementParent: make(map[ElementID]ElementID),
-		routeToEdge:   make(map[ElementID]map[Elements]struct{}),
+		routeToEdge:   make(map[ElementID]map[Edges]struct{}),
 		Changes:       make(chan interface{}),
 		index:         0,
 		blockLibrary:  core.GetLibrary(),
@@ -290,7 +290,7 @@ func (g *Graph) addConnection(e *CreateElement) {
 
 	g.routeToEdge[*e.SourceID][c] = struct{}{}
 	g.routeToEdge[*e.TargetID][c] = struct{}{}
-	fmt.Println(g.routeToEdge[*e.SourceID])
+
 	g.elements[*e.ID] = c
 }
 
@@ -322,7 +322,8 @@ func (g *Graph) addRoute(e *CreateElement) {
 		r.Source = *e.Source
 	}
 
-	g.routeToEdge[r.ID] = make(map[Elements]struct{})
+	g.routeToEdge[*e.ID] = make(map[Edges]struct{})
+
 	g.elements[*e.ID] = r
 }
 
@@ -643,9 +644,9 @@ func (g *Graph) Add(elements []*CreateElement, parent *ElementID) ([]ID, error) 
 	return newIDs, nil
 }
 
-func (g *Graph) recurseGetElements(id ElementID) ([]Elements, map[Elements]struct{}) {
+func (g *Graph) recurseGetElements(id ElementID) ([]Elements, map[Edges]struct{}) {
 	elements := []Elements{}
-	connections := make(map[Elements]struct{})
+	connections := make(map[Edges]struct{})
 
 	if group, ok := g.elements[id].(*Group); ok {
 		for _, child := range group.Children {
@@ -658,7 +659,6 @@ func (g *Graph) recurseGetElements(id ElementID) ([]Elements, map[Elements]struc
 	} else if node, ok := g.elements[id].(Nodes); ok {
 		for _, id := range node.GetRoutes() {
 			elements = append(elements, g.elements[id.ID])
-			fmt.Println(g.routeToEdge[id.ID], "????")
 			for conn, _ := range g.routeToEdge[id.ID] {
 				connections[conn] = struct{}{}
 			}
@@ -669,18 +669,60 @@ func (g *Graph) recurseGetElements(id ElementID) ([]Elements, map[Elements]struc
 	return elements, connections
 }
 
+func (g *Graph) getElement(id ElementID) []Elements {
+	re, rc := g.recurseGetElements(id)
+	final := []Elements{}
+	for _, e := range re {
+		final = append(final, e)
+		for c, _ := range rc {
+			source := c.GetSourceID()
+			target := c.GetTargetID()
+			sFound := false
+			tFound := false
+			for _, e2 := range final {
+				if e2.GetID() == source {
+					sFound = true
+				}
+				if e2.GetID() == target {
+					tFound = true
+				}
+			}
+			if sFound && tFound {
+				final = append(final, c.(Elements))
+				delete(rc, c)
+			}
+		}
+	}
+	return final
+}
+
 func (g *Graph) Get(ids ...ElementID) ([]Elements, error) {
 	elements := []Elements{}
 
 	if len(ids) == 0 {
-		for _, e := range g.elements {
-			elements = append(elements, e)
+		nullParents := []ElementID{}
+		for k, _ := range g.elements {
+			found := false
+			for id, _ := range g.elementParent {
+				if id == k {
+					found = true
+					break
+				}
+			}
+			if !found {
+				nullParents = append(nullParents, k)
+			}
 		}
+
+		fmt.Println(nullParents)
+
+		for _, id := range nullParents {
+			elements = append(elements, g.getElement(id)...)
+		}
+
 	} else {
 		for _, id := range ids {
-			e, c := g.recurseGetElements(id)
-			elements = append(elements, e...)
-			fmt.Println("HELLO, ", c)
+			elements = append(elements, g.getElement(id)...)
 		}
 	}
 

@@ -30,6 +30,11 @@ type Nodes interface {
 	GetRoutes() []ID
 }
 
+type Edges interface {
+	GetTargetID() ElementID
+	GetSourceID() ElementID
+}
+
 type Element struct {
 	ID    ElementID `json:"id"`
 	Type  string    `json:"type"`
@@ -136,10 +141,26 @@ type Link struct {
 	TargetID ElementID `json:"target_id"`
 }
 
+func (l *Link) GetSourceID() ElementID {
+	return l.SourceID
+}
+
+func (l *Link) GetTargetID() ElementID {
+	return l.TargetID
+}
+
 type Connection struct {
 	Element
 	SourceID ElementID `json:"source_id"`
 	TargetID ElementID `json:"target_id"`
+}
+
+func (c *Connection) GetSourceID() ElementID {
+	return c.SourceID
+}
+
+func (c *Connection) GetTargetID() ElementID {
+	return c.TargetID
 }
 
 type Route struct {

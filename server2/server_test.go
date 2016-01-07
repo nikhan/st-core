@@ -183,5 +183,9 @@ func TestServer(t *testing.T) {
 		t.Error(w.Body)
 	}
 
+	makeRequest(router, "POST", "pattern", w.Body)
+
+	makeRequest(router, "GET", "pattern", nil)
+
 	//makeRequest(router, "POST", "pattern?action=delete&id=test_pattern", nil)
 }
