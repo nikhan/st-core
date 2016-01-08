@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -22,14 +23,13 @@ func printGraph(g *Graph) {
 func makeRequest(router *mux.Router, method string, path string, body io.Reader) *httptest.ResponseRecorder {
 	requestURL := fmt.Sprintf("http://localhost/%s", path)
 	w := httptest.NewRecorder()
-	fmt.Println(body, nil)
 	r, err := http.NewRequest(method, requestURL, body)
 	if err != nil {
 		log.Println(err)
 		return w
 	}
 	router.ServeHTTP(w, r)
-	fmt.Printf("---\ncode: %d\nbody: %s", w.Code, w.Body)
+	fmt.Printf("---\ncode: %d\n", w.Code)
 	return w
 }
 
@@ -183,9 +183,33 @@ func TestServer(t *testing.T) {
 		t.Error(w.Body)
 	}
 
-	makeRequest(router, "POST", "pattern", w.Body)
+	body, err := ioutil.ReadAll(w.Body)
+	if err != nil {
+		t.Error(err)
+	}
 
-	makeRequest(router, "GET", "pattern", nil)
+	w2 := makeRequest(router, "GET", "pattern", nil)
+	body2, err := ioutil.ReadAll(w2.Body)
+	if err != nil {
+		t.Error(err)
+	}
+
+	if (body == nil || body2 == nil) || len(body) != len(body2) {
+		t.Error("exported bodies are not the same length")
+	}
+
+	for i, _ := range body {
+		if body[i] != body2[i] {
+			t.Error("exported bodies have unequal contents")
+		}
+	}
+
+	//fmt.Println(reflect.TypeOf(w2.Body))
+	//if w2 != w {
+	//	t.Error("bodies not equal")
+	//}
+
+	//makeRequest(router, "POST", "pattern", w.Body)
 
 	//makeRequest(router, "POST", "pattern?action=delete&id=test_pattern", nil)
 }

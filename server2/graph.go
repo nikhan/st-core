@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sort"
 	"strconv"
 	"sync"
 
@@ -644,23 +645,23 @@ func (g *Graph) Add(elements []*CreateElement, parent *ElementID) ([]ID, error) 
 	return newIDs, nil
 }
 
-func (g *Graph) recurseGetElements(id ElementID) ([]Elements, map[Edges]struct{}) {
+func (g *Graph) recurseGetElements(id ElementID) ([]Elements, map[ElementID]struct{}) {
 	elements := []Elements{}
-	connections := make(map[Edges]struct{})
+	connections := make(map[ElementID]struct{})
 
 	if group, ok := g.elements[id].(*Group); ok {
 		for _, child := range group.Children {
 			childElements, childConnections := g.recurseGetElements(child.ID)
 			elements = append(elements, childElements...)
-			for conn, _ := range childConnections {
-				connections[conn] = struct{}{}
+			for id, _ := range childConnections {
+				connections[id] = struct{}{}
 			}
 		}
 	} else if node, ok := g.elements[id].(Nodes); ok {
 		for _, id := range node.GetRoutes() {
 			elements = append(elements, g.elements[id.ID])
 			for conn, _ := range g.routeToEdge[id.ID] {
-				connections[conn] = struct{}{}
+				connections[conn.(Elements).GetID()] = struct{}{}
 			}
 		}
 	}
@@ -672,11 +673,23 @@ func (g *Graph) recurseGetElements(id ElementID) ([]Elements, map[Edges]struct{}
 func (g *Graph) getElement(id ElementID) []Elements {
 	re, rc := g.recurseGetElements(id)
 	final := []Elements{}
+
+	// basic lexical sort to ensure that we always have the same ordering
+	// for an exported pattern
+	connectionIDs := make([]string, len(rc))
+	index := 0
+	for id, _ := range rc {
+		connectionIDs[index] = string(id)
+		index += 1
+	}
+	sort.Strings(connectionIDs)
+
 	for _, e := range re {
 		final = append(final, e)
-		for c, _ := range rc {
-			source := c.GetSourceID()
-			target := c.GetTargetID()
+		for i := len(connectionIDs) - 1; i >= 0; i-- {
+			id := ElementID(connectionIDs[i])
+			source := g.elements[id].(Edges).GetSourceID()
+			target := g.elements[id].(Edges).GetTargetID()
 			sFound := false
 			tFound := false
 			for _, e2 := range final {
@@ -688,10 +701,11 @@ func (g *Graph) getElement(id ElementID) []Elements {
 				}
 			}
 			if sFound && tFound {
-				final = append(final, c.(Elements))
-				delete(rc, c)
+				final = append(final, g.elements[id])
+				connectionIDs = append(connectionIDs[:i], connectionIDs[i+1:]...)
 			}
 		}
+
 	}
 	return final
 }
@@ -709,12 +723,10 @@ func (g *Graph) Get(ids ...ElementID) ([]Elements, error) {
 					break
 				}
 			}
-			if !found {
+			if _, ok := g.elements[k].(Nodes); ok && !found {
 				nullParents = append(nullParents, k)
 			}
 		}
-
-		fmt.Println(nullParents)
 
 		for _, id := range nullParents {
 			elements = append(elements, g.getElement(id)...)
