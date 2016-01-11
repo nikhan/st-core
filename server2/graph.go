@@ -731,7 +731,6 @@ func (g *Graph) Get(ids ...ElementID) ([]Elements, error) {
 		for _, id := range nullParents {
 			elements = append(elements, g.getElement(id)...)
 		}
-
 	} else {
 		for _, id := range ids {
 			elements = append(elements, g.getElement(id)...)
@@ -820,25 +819,72 @@ func (g *Graph) BatchUngroup(ids []ElementID) error {
 	return nil
 }
 
+func (g *Graph) deleteBlock(id ElementID) {
+
+}
+
+func (g *Graph) deleteGroup(id ElementID) {
+
+}
+
+func (g *Graph) deleteSource(id ElementID) {
+
+}
+
+func (g *Graph) deleteLink(id ElementID) {
+
+}
+
+func (g *Graph) deleteConnection(id ElementID) {
+
+}
+
 func (g *Graph) BatchDelete(ids []ElementID) error {
 	err := g.validateIDs(ids...)
 	if err != nil {
 		return err
 	}
 
+	deleteIDs := make(map[ElementID]struct{})
+
 	for _, id := range ids {
+		switch e := g.elements[id].(type) {
+		case Nodes:
+			for _, route := range e.GetRoutes() {
+				for c, _ := range g.routeToEdge[route.ID] {
+					deleteIDs[c.(Elements).GetID()] = struct{}{}
+				}
+				deleteIDs[route.ID] = struct{}{}
+			}
+			deleteIDs[e.(Elements).GetID()] = struct{}{}
+			if group, ok := g.elements[e.(Elements).GetID()].(*Group); ok {
+				deleteChildren := make([]ElementID, len(group.Children))
+				for i, cid := range group.Children {
+					deleteChildren[i] = cid.ID
+				}
+				g.BatchDelete(deleteChildren)
+			}
+		case *Connection:
+			deleteIDs[e.Element.ID] = struct{}{}
+		case *Link:
+			deleteIDs[e.Element.ID] = struct{}{}
+		}
+	}
+
+	for id, _ := range deleteIDs {
 		switch g.elements[id].(type) {
 		case *Block:
-			fmt.Println("deleting block")
+			g.deleteBlock(id)
 		case *Group:
-			fmt.Println("deleting group")
+			g.deleteGroup(id)
 		case *Source:
-			fmt.Println("deleting source")
+			g.deleteSource(id)
 		case *Connection:
-			fmt.Println("deleting conection")
+			g.deleteConnection(id)
 		case *Link:
-			fmt.Println("deleting link")
+			g.deleteLink(id)
 		}
+		delete(g.elements, id)
 	}
 
 	return nil

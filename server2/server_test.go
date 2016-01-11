@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"reflect"
 	"testing"
 
 	"github.com/gorilla/mux"
@@ -20,17 +21,27 @@ func printGraph(g *Graph) {
 	fmt.Println(string(o))
 }
 
-func makeRequest(router *mux.Router, method string, path string, body io.Reader) *httptest.ResponseRecorder {
+func makeRequest(router *mux.Router, method string, path string, body io.Reader) (*httptest.ResponseRecorder, error) {
 	requestURL := fmt.Sprintf("http://localhost/%s", path)
 	w := httptest.NewRecorder()
 	r, err := http.NewRequest(method, requestURL, body)
 	if err != nil {
-		log.Println(err)
-		return w
+		return nil, err
 	}
 	router.ServeHTTP(w, r)
 	fmt.Printf("---\ncode: %d\n", w.Code)
-	return w
+	return w, nil
+}
+
+func decode(w []byte, v interface{}) (interface{}, error) {
+	t := reflect.TypeOf(v)
+	val := reflect.New(t).Interface()
+	err := json.NewDecoder(bytes.NewBuffer(w)).Decode(val)
+	if err != nil {
+		log.Println("received response:", string(w))
+		return nil, err
+	}
+	return val, nil
 }
 
 func TestServer(t *testing.T) {
@@ -158,52 +169,95 @@ func TestServer(t *testing.T) {
 	router := server.NewRouter()
 
 	for _, s := range pattern {
-		w := makeRequest(router, "POST", "pattern", bytes.NewBufferString(s))
-		if w.Code != 200 {
-			t.Error(w.Body)
+		w, err := makeRequest(router, "POST", "pattern", bytes.NewBufferString(s))
+		if err != nil || w.Code != 200 {
+			t.Error("error with response", err)
 		}
 	}
 
 	for _, s := range values {
-		w := makeRequest(router, "PUT", fmt.Sprintf("pattern/%s", s.id), bytes.NewBufferString(s.body))
-		if w.Code != 200 {
-			t.Error(w.Body)
+		w, err := makeRequest(router, "PUT", fmt.Sprintf("pattern/%s", s.id), bytes.NewBufferString(s.body))
+		if err != nil || w.Code != 200 {
+			t.Error("error with response", err)
 		}
 	}
 
 	for _, s := range hide {
-		w := makeRequest(router, "PUT", fmt.Sprintf("pattern/%s/route/%s", s.id, s.route), bytes.NewBufferString(s.body))
-		if w.Code != 200 {
-			t.Error(w.Body)
+		w, err := makeRequest(router, "PUT", fmt.Sprintf("pattern/%s/route/%s", s.id, s.route), bytes.NewBufferString(s.body))
+		if err != nil || w.Code != 200 {
+			t.Error("error with response", err)
 		}
 	}
 
-	w := makeRequest(router, "GET", "pattern/test_pattern", nil)
-	if w.Code != 200 {
-		t.Error(w.Body)
+	w, err := makeRequest(router, "GET", "pattern/test_pattern", nil)
+	if err != nil || w.Code != 200 {
+		t.Error("error with response", err)
 	}
 
-	body, err := ioutil.ReadAll(w.Body)
-	if err != nil {
-		t.Error(err)
+	body := w.Body.Bytes()
+
+	w2, err := makeRequest(router, "GET", "pattern", nil)
+	if err != nil || w.Code != 200 {
+		t.Error("error with response", err)
 	}
 
-	w2 := makeRequest(router, "GET", "pattern", nil)
-	body2, err := ioutil.ReadAll(w2.Body)
-	if err != nil {
-		t.Error(err)
-	}
+	body2 := w2.Body.Bytes()
 
-	if (body == nil || body2 == nil) || len(body) != len(body2) {
+	if body == nil || !bytes.Equal(body, body2) {
 		t.Error("exported bodies are not the same length")
 	}
 
-	for i, _ := range body {
-		if body[i] != body2[i] {
-			t.Error("exported bodies have unequal contents")
-		}
+	list := []*CreateElement{}
+
+	err = json.Unmarshal(body, &list)
+	if err != nil {
+		t.Error(err)
 	}
 
+	ids := url.Values{}
+	ids.Set("action", "delete")
+	for _, ce := range list {
+		ids.Add("id", string(*ce.ID))
+	}
+
+	// TODO: posting NIL body to pattern/ causes panic!
+	makeRequest(router, "PUT", "pattern?"+ids.Encode(), nil)
+
+	makeRequest(router, "POST", "pattern", bytes.NewBuffer(body))
+
+	w3, err := makeRequest(router, "GET", "pattern", nil)
+	if err != nil {
+		t.Error(err)
+	}
+
+	body3 := w3.Body.Bytes()
+
+	if body3 == nil || !bytes.Equal(body, body3) {
+		fmt.Println(string(body), string(body3))
+		t.Error("exported bodies are not the same length")
+	}
+
+	//w.Body.Reset()
+	//ce, err := decode(body, []*CreateElement{})
+	//if err != nil {
+	//	fmt.Println(err)
+	//	return
+	//}
+	//fmt.Println("??????", ce)
+
+	/*w3, err := makeRequest(router, "POST", "pattern", w.Body)
+	if err != nil {
+		t.Error(err)
+	}*/
+
+	/*newPattern, err := decode(w, *[]*CreateElement{})
+	if err != nil {
+		t.Error(err)
+	}*/
+
+	//makeRequest(router, "GET", "pattern", nil)
+
+	//makeRequest(router, "PUT", "pattern?action=delete&id=test_pattern", nil)
 	//fmt.Println(reflect.TypeOf(w2.Body))
 	//if w2 != w {
 	//	t.Error("bodies not equal")
