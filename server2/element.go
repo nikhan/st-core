@@ -186,6 +186,7 @@ type CreateElement struct {
 	Children  []ID             `json:"children"`
 	SourceID  *ElementID       `json:"source_id"`
 	TargetID  *ElementID       `json:"target_id"`
+	Value     *core.InputValue `json:"value"`
 }
 
 type UpdateElement struct {

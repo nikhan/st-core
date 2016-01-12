@@ -268,7 +268,15 @@ func (g *Graph) addGroup(e *CreateElement) {
 	group := &Group{
 		Element:  Element{},
 		Children: []ID{},
-		Routes:   []GroupRoute{},
+	}
+
+	if e.Routes != nil {
+		group.Routes = make([]GroupRoute, len(e.Routes))
+		for i, route := range e.Routes {
+			group.Routes[i] = route
+		}
+	} else {
+		group.Routes = []GroupRoute{}
 	}
 
 	g.elements[*e.ID] = group
@@ -319,6 +327,7 @@ func (g *Graph) addRoute(e *CreateElement) {
 	r.Direction = *e.Direction
 	r.JSONType = *e.JSONType
 	r.Name = *e.Name
+	r.Value = e.Value
 	if e.Source != nil {
 		r.Source = *e.Source
 	}
