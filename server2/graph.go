@@ -255,6 +255,8 @@ func (g *Graph) deleteChild(parent ElementID, child ElementID) {
 		}
 	}
 
+	delete(g.elementParent, child)
+
 	group.Children = append(group.Children[:index], group.Children[index+1:]...)
 
 	for _, route := range node.GetRoutes() {
@@ -654,6 +656,94 @@ func (g *Graph) Add(elements []*CreateElement, parent *ElementID) ([]ID, error) 
 	return newIDs, nil
 }
 
+func (g *Graph) recurseGetElements2(id ElementID) map[ElementID]struct{} {
+	elements := make(map[ElementID]struct{})
+
+	switch elem := g.elements[id].(type) {
+	case *Group:
+		for _, child := range elem.Children {
+			children := g.recurseGetElements2(child.ID)
+			for id, _ := range children {
+				elements[id] = struct{}{}
+			}
+		}
+	case Nodes:
+		for _, route := range elem.GetRoutes() {
+			elements[route.ID] = struct{}{}
+			for conn, _ := range g.routeToEdge[route.ID] {
+				elements[conn.(Elements).GetID()] = struct{}{}
+			}
+		}
+	}
+
+	elements[id] = struct{}{}
+	return elements
+}
+
+func (g *Graph) getElement(id ElementID, edgeInclusive bool) []Elements {
+	re, rc := g.recurseGetElements(id)
+	test := make(map[ElementID]struct{})
+	for _, v := range re {
+		test[v.GetID()] = struct{}{}
+		fmt.Println("ID:", v.GetID())
+	}
+	for k, _ := range rc {
+		fmt.Println("ID:", k)
+		test[k] = struct{}{}
+	}
+
+	pattern := g.recurseGetElements2(id)
+
+	fmt.Println(len(test), len(pattern), "<------ FOOOOOO")
+	for key, _ := range test {
+		if _, ok := pattern[key]; !ok {
+			fmt.Println("pattern does not have ", key)
+		}
+	}
+
+	elements := []string{}
+	edges := []string{}
+	final := []Elements{}
+
+	for id, _ := range pattern {
+		switch g.elements[id].(type) {
+		case Edges:
+			edges = append(edges, string(id))
+		default:
+			elements = append(elements, string(id))
+		}
+	}
+
+	sort.Strings(elements)
+	sort.Strings(edges)
+
+	for _, sid := range elements {
+		for i := len(edges) - 1; i >= 0; i-- {
+			id := ElementID(edges[i])
+			source := g.elements[id].(Edges).GetSourceID()
+			target := g.elements[id].(Edges).GetTargetID()
+			sFound := false
+			tFound := false
+			for _, e2 := range final {
+				if e2.GetID() == source {
+					sFound = true
+				}
+				if e2.GetID() == target {
+					tFound = true
+				}
+			}
+			if edgeInclusive && sFound && tFound || !edgeInclusive {
+				final = append(final, g.elements[id])
+				edges = append(edges[:i], edges[i+1:]...)
+			}
+
+		}
+		final = append(final, g.elements[ElementID(sid)])
+	}
+
+	return final
+}
+
 func (g *Graph) recurseGetElements(id ElementID) ([]Elements, map[ElementID]struct{}) {
 	elements := []Elements{}
 	connections := make(map[ElementID]struct{})
@@ -679,7 +769,7 @@ func (g *Graph) recurseGetElements(id ElementID) ([]Elements, map[ElementID]stru
 	return elements, connections
 }
 
-func (g *Graph) getElement(id ElementID) []Elements {
+/*func (g *Graph) getElement(id ElementID, edgeInclusive bool) []Elements {
 	re, rc := g.recurseGetElements(id)
 	final := []Elements{}
 
@@ -709,7 +799,7 @@ func (g *Graph) getElement(id ElementID) []Elements {
 					tFound = true
 				}
 			}
-			if sFound && tFound {
+			if edgeInclusive && sFound && tFound || !edgeInclusive {
 				final = append(final, g.elements[id])
 				connectionIDs = append(connectionIDs[:i], connectionIDs[i+1:]...)
 			}
@@ -717,7 +807,7 @@ func (g *Graph) getElement(id ElementID) []Elements {
 
 	}
 	return final
-}
+}*/
 
 func (g *Graph) Get(ids ...ElementID) ([]Elements, error) {
 	elements := []Elements{}
@@ -738,11 +828,11 @@ func (g *Graph) Get(ids ...ElementID) ([]Elements, error) {
 		}
 
 		for _, id := range nullParents {
-			elements = append(elements, g.getElement(id)...)
+			elements = append(elements, g.getElement(id, true)...)
 		}
 	} else {
 		for _, id := range ids {
-			elements = append(elements, g.getElement(id)...)
+			elements = append(elements, g.getElement(id, true)...)
 		}
 	}
 
@@ -857,6 +947,34 @@ func (g *Graph) BatchDelete(ids []ElementID) error {
 	deleteIDs := make(map[ElementID]struct{})
 
 	for _, id := range ids {
+		elements := g.getElement(id, false)
+		for _, e := range elements {
+			deleteIDs[e.GetID()] = struct{}{}
+		}
+	}
+
+	for id, _ := range deleteIDs {
+		switch e := g.elements[id].(type) {
+		case Nodes:
+			if group, ok := g.elements[id].(*Group); ok {
+				for _, child := range group.Children {
+					delete(g.elementParent, child.ID)
+				}
+			}
+
+			if p, ok := g.elementParent[id]; ok {
+				g.deleteChild(p, id)
+			}
+		case Edges:
+			t := e.GetTargetID()
+			s := e.GetSourceID()
+			delete(g.routeToEdge[t], e)
+			delete(g.routeToEdge[s], e)
+		}
+		delete(g.elements, id)
+	}
+
+	/*for _, id := range ids {
 		switch e := g.elements[id].(type) {
 		case Nodes:
 			for _, route := range e.GetRoutes() {
@@ -894,7 +1012,7 @@ func (g *Graph) BatchDelete(ids []ElementID) error {
 			g.deleteLink(id)
 		}
 		delete(g.elements, id)
-	}
+	}*/
 
 	return nil
 }

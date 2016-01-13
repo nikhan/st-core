@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"net/http/httptest"
@@ -29,7 +30,6 @@ func makeRequest(router *mux.Router, method string, path string, body io.Reader)
 		return nil, err
 	}
 	router.ServeHTTP(w, r)
-	fmt.Printf("---\ncode: %d\n", w.Code)
 	return w, nil
 }
 
@@ -42,6 +42,11 @@ func decode(w []byte, v interface{}) (interface{}, error) {
 		return nil, err
 	}
 	return val, nil
+}
+
+func dumpDiffJSON(left []byte, right []byte) {
+	ioutil.WriteFile("left.json", left, 0644)
+	ioutil.WriteFile("right.json", right, 0644)
 }
 
 func TestServer(t *testing.T) {
@@ -168,6 +173,7 @@ func TestServer(t *testing.T) {
 	server := NewServer()
 	router := server.NewRouter()
 
+	// import all elements
 	for _, s := range pattern {
 		w, err := makeRequest(router, "POST", "pattern", bytes.NewBufferString(s))
 		if err != nil || w.Code != 200 {
@@ -175,6 +181,7 @@ func TestServer(t *testing.T) {
 		}
 	}
 
+	// set all values
 	for _, s := range values {
 		w, err := makeRequest(router, "PUT", fmt.Sprintf("pattern/%s", s.id), bytes.NewBufferString(s.body))
 		if err != nil || w.Code != 200 {
@@ -182,6 +189,7 @@ func TestServer(t *testing.T) {
 		}
 	}
 
+	// hide routes
 	for _, s := range hide {
 		w, err := makeRequest(router, "PUT", fmt.Sprintf("pattern/%s/route/%s", s.id, s.route), bytes.NewBufferString(s.body))
 		if err != nil || w.Code != 200 {
@@ -189,6 +197,7 @@ func TestServer(t *testing.T) {
 		}
 	}
 
+	// retrieve test_pattern element
 	w, err := makeRequest(router, "GET", "pattern/test_pattern", nil)
 	if err != nil || w.Code != 200 {
 		t.Error("error with response", err)
@@ -196,6 +205,7 @@ func TestServer(t *testing.T) {
 
 	body := w.Body.Bytes()
 
+	// rerieve all elements
 	w2, err := makeRequest(router, "GET", "pattern", nil)
 	if err != nil || w.Code != 200 {
 		t.Error("error with response", err)
@@ -203,6 +213,7 @@ func TestServer(t *testing.T) {
 
 	body2 := w2.Body.Bytes()
 
+	// compare, these should be the exactly the same
 	if body == nil || !bytes.Equal(body, body2) {
 		t.Error("exported bodies are not the same length")
 	}
@@ -220,11 +231,20 @@ func TestServer(t *testing.T) {
 		ids.Add("id", string(*ce.ID))
 	}
 
+	// delete all elements individually according to output order
 	// TODO: posting NIL body to pattern/ causes panic!
-	makeRequest(router, "PUT", "pattern?"+ids.Encode(), nil)
+	_, err = makeRequest(router, "PUT", "pattern?"+ids.Encode(), nil)
+	if err != nil {
+		t.Error(err)
+	}
 
-	makeRequest(router, "POST", "pattern", bytes.NewBuffer(body))
+	// post pattern back into streamtools
+	_, err = makeRequest(router, "POST", "pattern", bytes.NewBuffer(body))
+	if err != nil {
+		t.Error(err)
+	}
 
+	// retrieve pattern
 	w3, err := makeRequest(router, "GET", "pattern", nil)
 	if err != nil {
 		t.Error(err)
@@ -232,10 +252,63 @@ func TestServer(t *testing.T) {
 
 	body3 := w3.Body.Bytes()
 
+	// imported pattern should be same as original pattern
 	if body3 == nil || !bytes.Equal(body, body3) {
 		fmt.Println(string(body), string(body3))
 		t.Error("exported bodies are not the same length")
 	}
+
+	// get the 'init' group pattern
+	init, err := makeRequest(router, "GET", "pattern/init", nil)
+	if err != nil {
+		t.Error(t)
+	}
+
+	//fmt.Println(string(init.Body.Bytes()))
+
+	// delete the 'init' group from the server
+	_, err = makeRequest(router, "PUT", "pattern?action=delete&id=init", nil)
+	if err != nil {
+		t.Error(err)
+	}
+
+	// TODO: ensure it has been deleted.
+	_, err = makeRequest(router, "GET", "pattern", nil)
+	if err != nil {
+		t.Error(t)
+	}
+
+	// add the 'init' group back to the test_pattern group
+	_, err = makeRequest(router, "POST", "pattern/test_pattern", init.Body)
+	if err != nil {
+		t.Error(t)
+	}
+
+	replacement := `{"id":"26","type":"connection","alias":"","source_id":"5","target_id":"7"}`
+	_, err = makeRequest(router, "POST", "pattern", bytes.NewBufferString(replacement))
+	if err != nil {
+		t.Error(t)
+	}
+
+	w4, err := makeRequest(router, "GET", "pattern", nil)
+	if err != nil {
+		t.Error(t)
+	}
+
+	body4 := w4.Body.Bytes()
+
+	// imported pattern should be same as original pattern
+	if body4 == nil || !bytes.Equal(body, body4) {
+		dumpDiffJSON(body, body4)
+		t.Error("exported bodies are not the same length")
+	}
+
+	//fmt.Println(string(p.Body.Bytes()))
+
+	//ce, err := decode(p.Body.Bytes(), []*CreateElement{})
+	//if err != nil {
+	//	t.Error(t)
+	//}
 
 	//w.Body.Reset()
 	//ce, err := decode(body, []*CreateElement{})

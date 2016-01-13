@@ -260,7 +260,7 @@ func (s *Server) NewRouter() *mux.Router {
 			"POST",
 			[]string{},
 			s.ParentCreateElementsHandler,
-			[]Handler{RecoverHandler, CreateHandler},
+			[]Handler{RecoverHandler, IdHandler, CreateHandler},
 		},
 		Endpoint{
 			"GetElement",
