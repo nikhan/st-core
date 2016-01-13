@@ -680,70 +680,6 @@ func (g *Graph) recurseGetElements2(id ElementID) map[ElementID]struct{} {
 	return elements
 }
 
-func (g *Graph) getElement(id ElementID, edgeInclusive bool) []Elements {
-	re, rc := g.recurseGetElements(id)
-	test := make(map[ElementID]struct{})
-	for _, v := range re {
-		test[v.GetID()] = struct{}{}
-		fmt.Println("ID:", v.GetID())
-	}
-	for k, _ := range rc {
-		fmt.Println("ID:", k)
-		test[k] = struct{}{}
-	}
-
-	pattern := g.recurseGetElements2(id)
-
-	fmt.Println(len(test), len(pattern), "<------ FOOOOOO")
-	for key, _ := range test {
-		if _, ok := pattern[key]; !ok {
-			fmt.Println("pattern does not have ", key)
-		}
-	}
-
-	elements := []string{}
-	edges := []string{}
-	final := []Elements{}
-
-	for id, _ := range pattern {
-		switch g.elements[id].(type) {
-		case Edges:
-			edges = append(edges, string(id))
-		default:
-			elements = append(elements, string(id))
-		}
-	}
-
-	sort.Strings(elements)
-	sort.Strings(edges)
-
-	for _, sid := range elements {
-		for i := len(edges) - 1; i >= 0; i-- {
-			id := ElementID(edges[i])
-			source := g.elements[id].(Edges).GetSourceID()
-			target := g.elements[id].(Edges).GetTargetID()
-			sFound := false
-			tFound := false
-			for _, e2 := range final {
-				if e2.GetID() == source {
-					sFound = true
-				}
-				if e2.GetID() == target {
-					tFound = true
-				}
-			}
-			if edgeInclusive && sFound && tFound || !edgeInclusive {
-				final = append(final, g.elements[id])
-				edges = append(edges[:i], edges[i+1:]...)
-			}
-
-		}
-		final = append(final, g.elements[ElementID(sid)])
-	}
-
-	return final
-}
-
 func (g *Graph) recurseGetElements(id ElementID) ([]Elements, map[ElementID]struct{}) {
 	elements := []Elements{}
 	connections := make(map[ElementID]struct{})
@@ -769,7 +705,7 @@ func (g *Graph) recurseGetElements(id ElementID) ([]Elements, map[ElementID]stru
 	return elements, connections
 }
 
-/*func (g *Graph) getElement(id ElementID, edgeInclusive bool) []Elements {
+func (g *Graph) getElement(id ElementID, edgeInclusive bool) []Elements {
 	re, rc := g.recurseGetElements(id)
 	final := []Elements{}
 
@@ -807,7 +743,7 @@ func (g *Graph) recurseGetElements(id ElementID) ([]Elements, map[ElementID]stru
 
 	}
 	return final
-}*/
+}
 
 func (g *Graph) Get(ids ...ElementID) ([]Elements, error) {
 	elements := []Elements{}

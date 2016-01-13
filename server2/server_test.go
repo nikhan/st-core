@@ -44,9 +44,8 @@ func decode(w []byte, v interface{}) (interface{}, error) {
 	return val, nil
 }
 
-func dumpDiffJSON(left []byte, right []byte) {
-	ioutil.WriteFile("left.json", left, 0644)
-	ioutil.WriteFile("right.json", right, 0644)
+func dump(filename string, left []byte) {
+	ioutil.WriteFile(filename, left, 0644)
 }
 
 func TestServer(t *testing.T) {
@@ -238,6 +237,16 @@ func TestServer(t *testing.T) {
 		t.Error(err)
 	}
 
+	zero, err := makeRequest(router, "GET", "pattern", nil)
+	if err != nil {
+		t.Error(err)
+	}
+
+	ce, _ := decode(zero.Body.Bytes(), []*CreateElement{})
+	if len(*ce.(*[]*CreateElement)) > 0 {
+		t.Error("delete did not remove all elements")
+	}
+
 	// post pattern back into streamtools
 	_, err = makeRequest(router, "POST", "pattern", bytes.NewBuffer(body))
 	if err != nil {
@@ -254,7 +263,8 @@ func TestServer(t *testing.T) {
 
 	// imported pattern should be same as original pattern
 	if body3 == nil || !bytes.Equal(body, body3) {
-		fmt.Println(string(body), string(body3))
+		dump("left.json", body)
+		dump("right.json", body3)
 		t.Error("exported bodies are not the same length")
 	}
 
@@ -284,7 +294,7 @@ func TestServer(t *testing.T) {
 		t.Error(t)
 	}
 
-	replacement := `{"id":"26","type":"connection","alias":"","source_id":"5","target_id":"7"}`
+	replacement := `{"id":"35","type":"connection","alias":"","source_id":"5","target_id":"7"}`
 	_, err = makeRequest(router, "POST", "pattern", bytes.NewBufferString(replacement))
 	if err != nil {
 		t.Error(t)
@@ -299,7 +309,8 @@ func TestServer(t *testing.T) {
 
 	// imported pattern should be same as original pattern
 	if body4 == nil || !bytes.Equal(body, body4) {
-		dumpDiffJSON(body, body4)
+		dump("body.json", body)
+		dump("body4.json", body4)
 		t.Error("exported bodies are not the same length")
 	}
 
