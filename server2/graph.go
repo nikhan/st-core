@@ -184,6 +184,7 @@ func (g *Graph) addRouteAscending(parent ElementID, route ElementID) error {
 			Hidden: hidden,
 			Alias:  "",
 		})
+		//	sort.Sort(ByID(group.Routes))
 	} else {
 		hidden = groupRoute.Hidden
 	}
@@ -234,6 +235,8 @@ func (g *Graph) addChild(parent ElementID, child ElementID) {
 	group := g.elements[parent].(*Group)
 	node := g.elements[child].(Nodes)
 	group.Children = append(group.Children, ID{child})
+	//sort.Sort(ByID(group.Children))
+
 	g.elementParent[child] = parent
 
 	for _, route := range node.GetRoutes() {
@@ -823,6 +826,13 @@ func (g *Graph) UpdateGroupRoute(id ElementID, routeID ElementID, update *Update
 
 	if update.Hidden != nil {
 		route.Hidden = *update.Hidden
+		if _, ok := g.elementParent[id]; ok {
+			if route.Hidden {
+				g.deleteRouteAscending(g.elementParent[id], routeID)
+			} else {
+				g.addRouteAscending(g.elementParent[id], routeID)
+			}
+		}
 	}
 
 	return nil
@@ -909,47 +919,6 @@ func (g *Graph) BatchDelete(ids []ElementID) error {
 		}
 		delete(g.elements, id)
 	}
-
-	/*for _, id := range ids {
-		switch e := g.elements[id].(type) {
-		case Nodes:
-			for _, route := range e.GetRoutes() {
-				for c, _ := range g.routeToEdge[route.ID] {
-					deleteIDs[c.(Elements).GetID()] = struct{}{}
-				}
-				deleteIDs[route.ID] = struct{}{}
-			}
-			deleteIDs[e.(Elements).GetID()] = struct{}{}
-			if group, ok := g.elements[e.(Elements).GetID()].(*Group); ok {
-				deleteChildren := make([]ElementID, len(group.Children))
-				for i, cid := range group.Children {
-					deleteChildren[i] = cid.ID
-				}
-				g.BatchDelete(deleteChildren)
-			}
-		case *Connection:
-			deleteIDs[e.Element.ID] = struct{}{}
-		case *Link:
-			deleteIDs[e.Element.ID] = struct{}{}
-		}
-	}
-
-	for id, _ := range deleteIDs {
-		switch g.elements[id].(type) {
-		case *Block:
-			g.deleteBlock(id)
-		case *Group:
-			g.deleteGroup(id)
-		case *Source:
-			g.deleteSource(id)
-		case *Connection:
-			g.deleteConnection(id)
-		case *Link:
-			g.deleteLink(id)
-		}
-		delete(g.elements, id)
-	}*/
-
 	return nil
 }
 
