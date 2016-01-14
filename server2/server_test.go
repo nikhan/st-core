@@ -38,9 +38,9 @@ func decode(w []byte, v interface{}) (interface{}, error) {
 	return val, nil
 }
 
-func findElement(id string, pattern interface{}) *CreateElement {
-	var element *CreateElement
-	ps := pattern.(*[]*CreateElement)
+func findElement(id string, pattern interface{}) *Element {
+	var element *Element
+	ps := pattern.(*[]*Element)
 	for _, ce := range *ps {
 		if *ce.ID == ElementID(id) {
 			element = ce
@@ -182,6 +182,7 @@ func TestServer(t *testing.T) {
 		w, err := makeRequest(router, "POST", "pattern", bytes.NewBufferString(s))
 		if err != nil || w.Code != 200 {
 			t.Error("error with response", err)
+			t.Error(string(w.Body.Bytes()))
 		}
 	}
 
@@ -199,10 +200,12 @@ func TestServer(t *testing.T) {
 		t.Error("error with response", err, string(w.Body.Bytes()))
 	}
 
-	test_pattern, err := decode(w.Body.Bytes(), []*CreateElement{})
+	test_pattern, err := decode(w.Body.Bytes(), []*Element{})
 	if err != nil {
 		t.Error("could not decode body of test pattern, ", err)
 	}
+
+	//fmt.Println(string(w.Body.Bytes()))
 
 	elm := findElement("test_pattern", test_pattern)
 	testPatternRoutesLength := len(elm.Routes)
@@ -212,6 +215,7 @@ func TestServer(t *testing.T) {
 		w, err := makeRequest(router, "PUT", fmt.Sprintf("pattern/%s/route/%s", s.id, s.route), bytes.NewBufferString(s.body))
 		if err != nil || w.Code != 200 {
 			t.Error("error with response", err)
+			t.Error(string(w.Body.Bytes()))
 		}
 	}
 
@@ -223,7 +227,7 @@ func TestServer(t *testing.T) {
 
 	body := w.Body.Bytes()
 
-	test_pattern, err = decode(body, []*CreateElement{})
+	test_pattern, err = decode(body, []*Element{})
 	if err != nil {
 		t.Error("could not decode body of test pattern, ", err)
 	}
@@ -239,7 +243,7 @@ func TestServer(t *testing.T) {
 	inc := findElement("inc", test_pattern)
 	found := false
 	for _, r := range inc.Routes {
-		if r.ID == "9" && r.Alias == "++" {
+		if *r.ID == "9" && *r.Alias == "++" {
 			found = true
 		}
 	}
@@ -267,7 +271,7 @@ func TestServer(t *testing.T) {
 		t.Error("exported bodies are not the same length")
 	}
 
-	list := []*CreateElement{}
+	list := []*Element{}
 
 	err = json.Unmarshal(body, &list)
 	if err != nil {
@@ -292,8 +296,8 @@ func TestServer(t *testing.T) {
 		t.Error(err)
 	}
 
-	ce, _ := decode(zero.Body.Bytes(), []*CreateElement{})
-	if len(*ce.(*[]*CreateElement)) > 0 {
+	ce, _ := decode(zero.Body.Bytes(), []*Element{})
+	if len(*ce.(*[]*Element)) > 0 {
 		t.Error("delete did not remove all elements")
 	}
 

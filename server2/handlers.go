@@ -77,7 +77,7 @@ func BodyHandler(inner http.Handler, v interface{}) http.Handler {
 }
 
 func CreateHandler(inner http.Handler) http.Handler {
-	return BodyHandler(inner, []*CreateElement{})
+	return BodyHandler(inner, []*Element{})
 }
 
 func UpdateHandler(inner http.Handler) http.Handler {

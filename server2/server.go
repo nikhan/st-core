@@ -21,8 +21,8 @@ type Server struct {
 }
 
 func (s *Server) WebSocketHandler(w http.ResponseWriter, r *http.Request) {}
-func (s *Server) CreateElementsHandler(w http.ResponseWriter, r *http.Request) {
-	elements := context.Get(r, "body").(*[]*CreateElement)
+func (s *Server) ElementsHandler(w http.ResponseWriter, r *http.Request) {
+	elements := context.Get(r, "body").(*[]*Element)
 
 	s.graph.Lock()
 	defer s.graph.Unlock()
@@ -36,8 +36,8 @@ func (s *Server) CreateElementsHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(ids)
 }
 
-func (s *Server) ParentCreateElementsHandler(w http.ResponseWriter, r *http.Request) {
-	elements := context.Get(r, "body").(*[]*CreateElement)
+func (s *Server) ParentElementsHandler(w http.ResponseWriter, r *http.Request) {
+	elements := context.Get(r, "body").(*[]*Element)
 	id := context.Get(r, "id").(ElementID)
 
 	s.graph.Lock()
@@ -247,19 +247,19 @@ func (s *Server) NewRouter() *mux.Router {
 			[]Handler{RecoverHandler},
 		},
 		Endpoint{
-			"CreateElements",
+			"Elements",
 			"/pattern",
 			"POST",
 			[]string{},
-			s.CreateElementsHandler,
+			s.ElementsHandler,
 			[]Handler{RecoverHandler, CreateHandler},
 		},
 		Endpoint{
-			"CreateElements",
+			"Elements",
 			"/pattern/{id}",
 			"POST",
 			[]string{},
-			s.ParentCreateElementsHandler,
+			s.ParentElementsHandler,
 			[]Handler{RecoverHandler, IdHandler, CreateHandler},
 		},
 		Endpoint{
