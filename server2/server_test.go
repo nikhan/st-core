@@ -356,7 +356,7 @@ func TestServer(t *testing.T) {
 	}
 
 	// TODO: make these equal in order.
-	/*w4, err := makeRequest(router, "GET", "pattern", nil)
+	w4, err := makeRequest(router, "GET", "pattern", nil)
 	if err != nil {
 		t.Error(t)
 	}
@@ -368,5 +368,5 @@ func TestServer(t *testing.T) {
 		dump("body.json", body)
 		dump("body4.json", body4)
 		t.Error("exported bodies are not the same length")
-	}*/
+	}
 }

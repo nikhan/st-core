@@ -167,10 +167,6 @@ func (g *Graph) addRouteAscending(parent ElementID, route ElementID) error {
 		return err
 	}
 
-	/*group, ok := g.elements[parent].(*Group)
-	if !ok {
-		return errors.New(fmt.Sprintf("addRouteAscending: %s not a group", parent))
-	}*/
 	hidden := false
 
 	// check to see if this group already has this route added
@@ -236,6 +232,9 @@ func (g *Graph) addChild(parent ElementID, child ElementID) {
 	g.elementParent[child] = parent
 
 	for _, route := range node.Routes {
+		if route.Hidden != nil && *route.Hidden {
+			continue
+		}
 		g.addRouteAscending(parent, *route.ID)
 	}
 }
