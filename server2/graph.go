@@ -663,6 +663,10 @@ func (g *Graph) recurseGetElements(id ElementID) ([]*Element, map[ElementID]stru
 	return elements, connections
 }
 
+// retrieve element and all children of element, including routes
+// if edgeInclusive is true, only return edges where both source and target are
+// present inside the returned set of elements. if edgeInclusive is false,
+// return all connected affiliated with the element and the element's children
 func (g *Graph) getElement(id ElementID, edgeInclusive bool) []*Element {
 	re, rc := g.recurseGetElements(id)
 	final := []*Element{}
