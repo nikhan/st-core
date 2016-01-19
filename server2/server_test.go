@@ -349,7 +349,7 @@ func TestServer(t *testing.T) {
 		t.Error(t)
 	}
 
-	replacement := `{"id":"35","type":"connection","alias":"","source_id":"5","target_id":"7"}`
+	replacement := `[{"id":"26","type":"connection","source_id":"5","target_id":"7"}]`
 	_, err = makeRequest(router, "POST", "pattern", bytes.NewBufferString(replacement))
 	if err != nil {
 		t.Error(t)

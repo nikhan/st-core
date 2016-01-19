@@ -177,6 +177,7 @@ func (g *Graph) addRouteAscending(parent ElementID, route ElementID) error {
 			Hidden: refBool(hidden),
 			Alias:  refString(""),
 		})
+		sort.Sort(ByID(g.elements[parent].Routes))
 	} else {
 		hidden = *groupRoute.Hidden
 	}
@@ -227,7 +228,7 @@ func (g *Graph) addChild(parent ElementID, child ElementID) {
 	group := g.elements[parent]
 	node := g.elements[child]
 	group.Children = append(group.Children, &ElementItem{ID: refElementID(child)})
-	//sort.Sort(ByID(group.Children))
+	sort.Sort(ByID(group.Children))
 
 	g.elementParent[child] = parent
 
