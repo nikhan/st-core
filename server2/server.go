@@ -65,12 +65,14 @@ func (s *Server) MelodyError(session *melody.Session, err error) {
 }
 
 func (s *Server) MelodyMessage(session *melody.Session, msg []byte) {
-	var req Element
-	err := json.NewDecoder(msg).Decode(req)
+	req := &Element{}
+	err := json.Unmarshal(msg, &req)
 	if err != nil {
 		return
 	}
-	s.m.Broadcast([]byte(`hey friends`))
+	// TODO: check ID
+	s.graph.Subscribe(string(*req.ID), s.hub.wsPubSub[session])
+	//s.m.Broadcast([]byte(*req.ID))
 }
 
 func (s *Server) WebSocketHandler(w http.ResponseWriter, r *http.Request) {
