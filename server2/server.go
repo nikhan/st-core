@@ -3,24 +3,80 @@ package stserver
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
+	"sync"
 
 	"github.com/gorilla/context"
 	"github.com/gorilla/mux"
+	"github.com/olahol/melody"
 )
 
-func NewServer() *Server {
-	return &Server{
-		graph: NewGraph(),
+func NewHub() *Hub {
+	return &Hub{
+		wsPubSub: make(map[*melody.Session]chan interface{}),
 	}
+}
+
+type Hub struct {
+	sync.Mutex
+	wsPubSub map[*melody.Session]chan interface{}
+}
+
+func NewServer() *Server {
+	m := melody.New()
+	server := &Server{
+		graph: NewGraph(),
+		m:     m,
+		hub:   NewHub(),
+	}
+
+	m.HandleConnect(server.MelodyConnect)
+	m.HandleMessage(server.MelodyMessage)
+	m.HandleDisconnect(server.MelodyDisconnect)
+	m.HandleError(server.MelodyError)
+
+	return server
 }
 
 type Server struct {
 	graph *Graph
+	m     *melody.Melody
+	hub   *Hub
 }
 
-func (s *Server) WebSocketHandler(w http.ResponseWriter, r *http.Request) {}
+func (s *Server) MelodyConnect(session *melody.Session) {
+	s.hub.Lock()
+	defer s.hub.Unlock()
+	s.hub.wsPubSub[session] = make(chan interface{})
+}
+
+func (s *Server) MelodyDisconnect(session *melody.Session) {
+	s.hub.Lock()
+	defer s.hub.Unlock()
+	s.graph.Unsubscribe(s.hub.wsPubSub[session])
+	close(s.hub.wsPubSub[session])
+	delete(s.hub.wsPubSub, session)
+}
+
+func (s *Server) MelodyError(session *melody.Session, err error) {
+	log.Println(err)
+}
+
+func (s *Server) MelodyMessage(session *melody.Session, msg []byte) {
+	var req Element
+	err := json.NewDecoder(msg).Decode(req)
+	if err != nil {
+		return
+	}
+	s.m.Broadcast([]byte(`hey friends`))
+}
+
+func (s *Server) WebSocketHandler(w http.ResponseWriter, r *http.Request) {
+	s.m.HandleRequest(w, r)
+}
+
 func (s *Server) ElementsHandler(w http.ResponseWriter, r *http.Request) {
 	elements := context.Get(r, "body").(*[]*Element)
 

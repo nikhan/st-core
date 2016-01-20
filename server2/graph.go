@@ -28,15 +28,79 @@ func refBool(b bool) *bool {
 	return &b
 }
 
+type PubSubMessage struct {
+	Topic   string
+	Message interface{}
+}
+
+type PubSub struct {
+	sync.Mutex
+	topics  map[string]map[chan interface{}]struct{}
+	publish chan *PubSubMessage
+}
+
+func NewPubSub() *PubSub {
+	pb := PubSub{
+		topics:  make(map[string]map[chan interface{}]struct{}),
+		publish: make(chan *PubSubMessage),
+	}
+	go pb.listen()
+	return &pb
+}
+
+func (p *PubSub) listen() {
+	for {
+		select {
+		case m := <-p.publish:
+			if subscribers, ok := p.topics[m.Topic]; ok {
+				for subscriber, _ := range subscribers {
+					subscriber <- m.Message
+				}
+			}
+		}
+	}
+}
+
+func (p *PubSub) Subscribe(topic string, subscription chan interface{}) {
+	p.Lock()
+	defer p.Unlock()
+	if _, ok := p.topics[topic]; !ok {
+		p.topics[topic] = make(map[chan interface{}]struct{})
+	}
+	p.topics[topic][subscription] = struct{}{}
+}
+
+func (p *PubSub) Unsubscribe(subscription chan interface{}) error {
+	p.Lock()
+	defer p.Unlock()
+	for _, topic := range p.topics {
+		for subscriber, _ := range topic {
+			if subscriber == subscription {
+				delete(topic, subscription)
+				return nil
+			}
+		}
+	}
+	return errors.New("could not delete channel, does not exist")
+}
+
+func (p *PubSub) Publish(topic string, message interface{}) {
+	p.publish <- &PubSubMessage{
+		Topic:   topic,
+		Message: message,
+	}
+}
+
 type Graph struct {
 	sync.Mutex
 	elements      map[ElementID]*Element
 	elementParent map[ElementID]ElementID
 	routeToEdge   map[ElementID]map[ElementID]struct{}
-	Changes       chan interface{}
+	Changes       chan *PubSubMessage
 	index         int64
 	blockLibrary  map[string]core.Spec
 	sourceLibrary map[string]core.SourceSpec
+	*PubSub
 }
 
 // NewGraph returns a reference to an initialized Graph
@@ -45,10 +109,11 @@ func NewGraph() *Graph {
 		elements:      make(map[ElementID]*Element),
 		elementParent: make(map[ElementID]ElementID),
 		routeToEdge:   make(map[ElementID]map[ElementID]struct{}),
-		Changes:       make(chan interface{}),
+		Changes:       make(chan *PubSubMessage),
 		index:         0,
 		blockLibrary:  core.GetLibrary(),
 		sourceLibrary: core.GetSources(),
+		PubSub:        NewPubSub(),
 	}
 }
 

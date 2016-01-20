@@ -362,6 +362,7 @@ func TestServer(t *testing.T) {
 	}
 
 	body4 := w4.Body.Bytes()
+	fmt.Println(string(body4))
 
 	// imported pattern should be same as original pattern
 	if body4 == nil || !bytes.Equal(body, body4) {
