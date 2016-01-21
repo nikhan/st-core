@@ -50,6 +50,12 @@ func (s *Server) MelodyConnect(session *melody.Session) {
 	s.hub.Lock()
 	defer s.hub.Unlock()
 	s.hub.wsPubSub[session] = make(chan interface{})
+	go func() {
+		for m := range s.hub.wsPubSub[session] {
+			out, _ := json.Marshal(m)
+			session.Write(out)
+		}
+	}()
 }
 
 func (s *Server) MelodyDisconnect(session *melody.Session) {

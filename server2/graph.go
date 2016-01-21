@@ -676,6 +676,11 @@ func (g *Graph) Add(elements []*Element, parent *ElementID) ([]*ElementItem, err
 		}
 	}
 
+	// TO BE FIXED
+	if parent != nil {
+		g.Publish(string(*parent), newIDs)
+	}
+
 	return newIDs, nil
 }
 
