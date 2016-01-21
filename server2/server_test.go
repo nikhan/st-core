@@ -7,24 +7,24 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
 	"reflect"
 	"testing"
 
-	"github.com/gorilla/mux"
+	"github.com/gorilla/websocket"
 )
 
-func makeRequest(router *mux.Router, method string, path string, body io.Reader) (*httptest.ResponseRecorder, error) {
-	requestURL := fmt.Sprintf("http://localhost/%s", path)
-	w := httptest.NewRecorder()
+func makeRequest(host string, method string, path string, body io.Reader) (*http.Response, error) {
+	requestURL := fmt.Sprintf("http://%s%s", host, path)
 	r, err := http.NewRequest(method, requestURL, body)
 	if err != nil {
 		return nil, err
 	}
-	router.ServeHTTP(w, r)
-	return w, nil
+
+	client := http.Client{}
+	return client.Do(r)
 }
 
 func decode(w []byte, v interface{}) (interface{}, error) {
@@ -174,33 +174,76 @@ func TestServer(t *testing.T) {
 		},
 	}
 
+	//server := NewServer()
+	//addr := server.NewRouter()
+
+	// start the server
 	server := NewServer()
 	router := server.NewRouter()
 
+	http.Handle("/", router)
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		log.Fatal("Listen:", err)
+	}
+
+	addr := listener.Addr().String()
+	fmt.Println(addr)
+	go func(l net.Listener) {
+		err := http.Serve(l, nil)
+		if err != nil {
+			log.Panicf(err.Error())
+		}
+	}(listener)
+
+	u := url.URL{Scheme: "ws", Host: addr, Path: "/ws"}
+	log.Printf("connecting to %s", u.String())
+
+	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	if err != nil {
+		log.Fatal("dial:", err)
+	}
+	defer c.Close()
+
+	go func() {
+		for {
+			_, p, err := c.ReadMessage()
+			if err != nil {
+				return
+			}
+			fmt.Println(string(p))
+		}
+	}()
+
 	// import all elements
 	for _, s := range pattern {
-		w, err := makeRequest(router, "POST", "pattern", bytes.NewBufferString(s))
-		if err != nil || w.Code != 200 {
+		w, err := makeRequest(addr, "POST", "/pattern", bytes.NewBufferString(s))
+		if err != nil || w.StatusCode != 200 {
 			t.Error("error with response", err)
-			t.Error(string(w.Body.Bytes()))
 		}
 	}
 
 	// set all values
 	for _, s := range values {
-		w, err := makeRequest(router, "PUT", fmt.Sprintf("pattern/%s", s.id), bytes.NewBufferString(s.body))
-		if err != nil || w.Code != 200 {
+		w, err := makeRequest(addr, "PUT", fmt.Sprintf("/pattern/%s", s.id), bytes.NewBufferString(s.body))
+		if err != nil || w.StatusCode != 200 {
 			t.Error("error with response", err)
 		}
 	}
 
 	// retrieve test_pattern element
-	w, err := makeRequest(router, "GET", "pattern/test_pattern", nil)
-	if err != nil || w.Code != 200 {
-		t.Error("error with response", err, string(w.Body.Bytes()))
+	w, err := makeRequest(addr, "GET", "/pattern/test_pattern", nil)
+	if err != nil || w.StatusCode != 200 {
+		t.Error("error with response", err)
 	}
 
-	test_pattern, err := decode(w.Body.Bytes(), []*Element{})
+	tBody, err := ioutil.ReadAll(w.Body)
+	if err != nil {
+		t.Error(err)
+	}
+
+	test_pattern, err := decode(tBody, []*Element{})
 	if err != nil {
 		t.Error("could not decode body of test pattern, ", err)
 	}
@@ -212,20 +255,22 @@ func TestServer(t *testing.T) {
 
 	// hide routes
 	for _, s := range hide {
-		w, err := makeRequest(router, "PUT", fmt.Sprintf("pattern/%s/route/%s", s.id, s.route), bytes.NewBufferString(s.body))
-		if err != nil || w.Code != 200 {
+		w, err := makeRequest(addr, "PUT", fmt.Sprintf("/pattern/%s/route/%s", s.id, s.route), bytes.NewBufferString(s.body))
+		if err != nil || w.StatusCode != 200 {
 			t.Error("error with response", err)
-			t.Error(string(w.Body.Bytes()))
 		}
 	}
 
 	// retrieve test_pattern element
-	w, err = makeRequest(router, "GET", "pattern/test_pattern", nil)
-	if err != nil || w.Code != 200 {
+	w, err = makeRequest(addr, "GET", "/pattern/test_pattern", nil)
+	if err != nil || w.StatusCode != 200 {
 		t.Error("error with response", err)
 	}
 
-	body := w.Body.Bytes()
+	body, err := ioutil.ReadAll(w.Body)
+	if err != nil {
+		t.Error(err)
+	}
 
 	test_pattern, err = decode(body, []*Element{})
 	if err != nil {
@@ -259,12 +304,15 @@ func TestServer(t *testing.T) {
 	}
 
 	// rerieve all elements
-	w2, err := makeRequest(router, "GET", "pattern", nil)
-	if err != nil || w.Code != 200 {
+	w2, err := makeRequest(addr, "GET", "/pattern", nil)
+	if err != nil || w.StatusCode != 200 {
 		t.Error("error with response", err)
 	}
 
-	body2 := w2.Body.Bytes()
+	body2, err := ioutil.ReadAll(w2.Body)
+	if err != nil {
+		t.Error(err)
+	}
 
 	// compare, these should be the exactly the same
 	if body == nil || !bytes.Equal(body, body2) {
@@ -286,34 +334,42 @@ func TestServer(t *testing.T) {
 
 	// delete all elements individually according to output order
 	// TODO: posting NIL body to pattern/ causes panic!
-	_, err = makeRequest(router, "PUT", "pattern?"+ids.Encode(), nil)
+	_, err = makeRequest(addr, "PUT", "/pattern?"+ids.Encode(), nil)
 	if err != nil {
 		t.Error(err)
 	}
 
-	zero, err := makeRequest(router, "GET", "pattern", nil)
+	zero, err := makeRequest(addr, "GET", "/pattern", nil)
 	if err != nil {
 		t.Error(err)
 	}
 
-	ce, _ := decode(zero.Body.Bytes(), []*Element{})
+	zbb, err := ioutil.ReadAll(zero.Body)
+	if err != nil {
+		t.Error(err)
+	}
+
+	ce, _ := decode(zbb, []*Element{})
 	if len(*ce.(*[]*Element)) > 0 {
 		t.Error("delete did not remove all elements")
 	}
 
 	// post pattern back into streamtools
-	_, err = makeRequest(router, "POST", "pattern", bytes.NewBuffer(body))
+	_, err = makeRequest(addr, "POST", "/pattern", bytes.NewBuffer(body))
 	if err != nil {
 		t.Error(err)
 	}
 
 	// retrieve pattern
-	w3, err := makeRequest(router, "GET", "pattern", nil)
+	w3, err := makeRequest(addr, "GET", "/pattern", nil)
 	if err != nil {
 		t.Error(err)
 	}
 
-	body3 := w3.Body.Bytes()
+	body3, err := ioutil.ReadAll(w3.Body)
+	if err != nil {
+		t.Error(err)
+	}
 
 	// TODO: make this work
 	// imported pattern should be same as original pattern
@@ -324,7 +380,7 @@ func TestServer(t *testing.T) {
 	}
 
 	// get the 'init' group pattern
-	init, err := makeRequest(router, "GET", "pattern/init", nil)
+	init, err := makeRequest(addr, "GET", "/pattern/init", nil)
 	if err != nil {
 		t.Error(t)
 	}
@@ -332,37 +388,39 @@ func TestServer(t *testing.T) {
 	//fmt.Println(string(init.Body.Bytes()))
 
 	// delete the 'init' group from the server
-	_, err = makeRequest(router, "PUT", "pattern?action=delete&id=init", nil)
+	_, err = makeRequest(addr, "PUT", "/pattern?action=delete&id=init", nil)
 	if err != nil {
 		t.Error(err)
 	}
 
 	// TODO: ensure it has been deleted.
-	_, err = makeRequest(router, "GET", "pattern", nil)
+	_, err = makeRequest(addr, "GET", "/pattern", nil)
 	if err != nil {
 		t.Error(t)
 	}
 
 	// add the 'init' group back to the test_pattern group
-	_, err = makeRequest(router, "POST", "pattern/test_pattern", init.Body)
+	_, err = makeRequest(addr, "POST", "/pattern/test_pattern", init.Body)
 	if err != nil {
 		t.Error(t)
 	}
 
 	replacement := `[{"id":"26","type":"connection","source_id":"5","target_id":"7"}]`
-	_, err = makeRequest(router, "POST", "pattern", bytes.NewBufferString(replacement))
+	_, err = makeRequest(addr, "POST", "/pattern", bytes.NewBufferString(replacement))
 	if err != nil {
 		t.Error(t)
 	}
 
 	// TODO: make these equal in order.
-	w4, err := makeRequest(router, "GET", "pattern", nil)
+	w4, err := makeRequest(addr, "GET", "/pattern", nil)
 	if err != nil {
 		t.Error(t)
 	}
 
-	body4 := w4.Body.Bytes()
-	fmt.Println(string(body4))
+	body4, err := ioutil.ReadAll(w4.Body)
+	if err != nil {
+		t.Error(err)
+	}
 
 	// imported pattern should be same as original pattern
 	if body4 == nil || !bytes.Equal(body, body4) {

@@ -186,9 +186,9 @@ func (s *Server) SetElementStateHandler(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-func (s *Server) UpdateElementHandler(w http.ResponseWriter, r *http.Request) {
+func (s *Server) UpdateHandler(w http.ResponseWriter, r *http.Request) {
 	id := context.Get(r, "id").(ElementID)
-	update := context.Get(r, "body").(*UpdateElement)
+	update := context.Get(r, "body").(*Update)
 
 	s.graph.Lock()
 	defer s.graph.Unlock()
@@ -203,7 +203,7 @@ func (s *Server) UpdateElementHandler(w http.ResponseWriter, r *http.Request) {
 func (s *Server) UpdateGroupRouteHandler(w http.ResponseWriter, r *http.Request) {
 	id := context.Get(r, "id").(ElementID)
 	routeID := context.Get(r, "routeID").(ElementID)
-	update := context.Get(r, "body").(*UpdateElement)
+	update := context.Get(r, "body").(*Update)
 
 	s.graph.Lock()
 	defer s.graph.Unlock()
@@ -351,11 +351,11 @@ func (s *Server) NewRouter() *mux.Router {
 			[]Handler{RecoverHandler, IdHandler},
 		},
 		Endpoint{
-			"UpdateElement",
+			"Update",
 			"/pattern/{id}",
 			"PUT",
 			[]string{},
-			s.UpdateElementHandler,
+			s.UpdateHandler,
 			[]Handler{RecoverHandler, IdHandler, UpdateHandler},
 		},
 		Endpoint{

@@ -81,7 +81,7 @@ func CreateHandler(inner http.Handler) http.Handler {
 }
 
 func UpdateHandler(inner http.Handler) http.Handler {
-	return BodyHandler(inner, UpdateElement{})
+	return BodyHandler(inner, Update{})
 }
 
 func QueryIDHandler(inner http.Handler) http.Handler {

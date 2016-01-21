@@ -93,27 +93,29 @@ func (p *PubSub) Publish(topic string, message interface{}) {
 
 type Graph struct {
 	sync.Mutex
-	elements      map[ElementID]*Element
-	elementParent map[ElementID]ElementID
-	routeToEdge   map[ElementID]map[ElementID]struct{}
-	Changes       chan *PubSubMessage
-	index         int64
-	blockLibrary  map[string]core.Spec
-	sourceLibrary map[string]core.SourceSpec
+	elements       map[ElementID]*Element
+	elementParent  map[ElementID]ElementID
+	routeToEdge    map[ElementID]map[ElementID]struct{}
+	routeToElement map[ElementID]map[ElementID]struct{}
+	Changes        chan *PubSubMessage
+	index          int64
+	blockLibrary   map[string]core.Spec
+	sourceLibrary  map[string]core.SourceSpec
 	*PubSub
 }
 
 // NewGraph returns a reference to an initialized Graph
 func NewGraph() *Graph {
 	return &Graph{
-		elements:      make(map[ElementID]*Element),
-		elementParent: make(map[ElementID]ElementID),
-		routeToEdge:   make(map[ElementID]map[ElementID]struct{}),
-		Changes:       make(chan *PubSubMessage),
-		index:         0,
-		blockLibrary:  core.GetLibrary(),
-		sourceLibrary: core.GetSources(),
-		PubSub:        NewPubSub(),
+		elements:       make(map[ElementID]*Element),
+		elementParent:  make(map[ElementID]ElementID),
+		routeToEdge:    make(map[ElementID]map[ElementID]struct{}),
+		routeToElement: make(map[ElementID]map[ElementID]struct{}),
+		Changes:        make(chan *PubSubMessage),
+		index:          0,
+		blockLibrary:   core.GetLibrary(),
+		sourceLibrary:  core.GetSources(),
+		PubSub:         NewPubSub(),
 	}
 }
 
@@ -188,6 +190,10 @@ func (g *Graph) addBlock(e *Element) []*ElementItem {
 		e.Routes = newIDs
 	}
 
+	for _, route := range e.Routes {
+		g.routeToElement[*route.ID][*e.ID] = struct{}{}
+	}
+
 	g.elements[*e.ID] = e
 	return newIDs
 }
@@ -242,7 +248,10 @@ func (g *Graph) addRouteAscending(parent ElementID, route ElementID) error {
 			Hidden: refBool(hidden),
 			Alias:  refString(""),
 		})
+
 		sort.Sort(ByID(g.elements[parent].Routes))
+
+		g.routeToElement[route][parent] = struct{}{}
 	} else {
 		hidden = *groupRoute.Hidden
 	}
@@ -278,6 +287,8 @@ func (g *Graph) deleteRouteAscending(parent ElementID, route ElementID) error {
 	}
 
 	g.elements[parent].Routes = append(g.elements[parent].Routes[:index], g.elements[parent].Routes[index+1:]...)
+
+	delete(g.routeToElement[route], parent)
 
 	if parentID, ok := g.elementParent[parent]; ok {
 		return g.deleteRouteAscending(parentID, route)
@@ -361,6 +372,7 @@ func (g *Graph) addLink(e *Element) {
 // addRoute creates a route and adds it to the graph.
 func (g *Graph) addRoute(e *Element) {
 	g.routeToEdge[*e.ID] = make(map[ElementID]struct{})
+	g.routeToElement[*e.ID] = make(map[ElementID]struct{})
 	g.elements[*e.ID] = e
 }
 
@@ -824,7 +836,7 @@ func (g *Graph) validateIDs(ids ...ElementID) error {
 	return nil
 }
 
-func (g *Graph) Update(id ElementID, update *UpdateElement) error {
+func (g *Graph) Update(id ElementID, update *Update) error {
 	err := g.validateIDs(id)
 	if err != nil {
 		return err
@@ -837,7 +849,7 @@ func (g *Graph) Update(id ElementID, update *UpdateElement) error {
 	return nil
 }
 
-func (g *Graph) UpdateGroupRoute(id ElementID, routeID ElementID, update *UpdateElement) error {
+func (g *Graph) UpdateGroupRoute(id ElementID, routeID ElementID, update *Update) error {
 	err := g.validateIDs(id, routeID)
 	if err != nil {
 		return err
@@ -941,6 +953,8 @@ func (g *Graph) BatchDelete(ids []ElementID) error {
 		case CONNECTION, LINK:
 			delete(g.routeToEdge[*g.elements[id].TargetID], id)
 			delete(g.routeToEdge[*g.elements[id].SourceID], id)
+		case ROUTE:
+			delete(g.routeToElement, id)
 		}
 		delete(g.elements, id)
 	}

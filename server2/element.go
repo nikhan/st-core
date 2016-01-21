@@ -27,6 +27,12 @@ type ElementItem struct {
 	Alias  *string    `json:"alias,omitempty"`
 }
 
+type ByID []*ElementItem
+
+func (a ByID) Len() int           { return len(a) }
+func (a ByID) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a ByID) Less(i, j int) bool { return *a[i].ID < *a[j].ID }
+
 type Element struct {
 	ID        *ElementID       `json:"id"`
 	Type      *string          `json:"type,omitempty"`
@@ -61,15 +67,11 @@ func (e *Element) isNode() bool {
 	return false
 }
 
-type UpdateElement struct {
-	Alias    *string          `json:"alias"`
-	Position *Position        `json:"position"`
-	Value    *core.InputValue `json:"value"`
-	Hidden   *bool            `json:"hidden"`
+type Update struct {
+	Action   *string          `json:"action"`
+	Data     []Element        `json:"data,omitempty"`
+	Alias    *string          `json:"alias,omitempty"`
+	Position *Position        `json:"position,omitempty"`
+	Value    *core.InputValue `json:"value,omitempty"`
+	Hidden   *bool            `json:"hidden,omitempty"`
 }
-
-type ByID []*ElementItem
-
-func (a ByID) Len() int           { return len(a) }
-func (a ByID) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
-func (a ByID) Less(i, j int) bool { return *a[i].ID < *a[j].ID }
