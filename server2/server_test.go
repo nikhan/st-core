@@ -352,8 +352,6 @@ func TestServer(t *testing.T) {
 		t.Error(t)
 	}
 
-	//fmt.Println(string(init.Body.Bytes()))
-
 	// delete the 'init' group from the server
 	_, err = makeRequest(addr, "PUT", "/pattern?action=delete&id=init", nil)
 	if err != nil {
@@ -372,13 +370,14 @@ func TestServer(t *testing.T) {
 		t.Error(t)
 	}
 
+	// add back the connection that was destroyed by deleting the init group
 	replacement := `[{"id":"26","type":"connection","source_id":"5","target_id":"7"}]`
 	_, err = makeRequest(addr, "POST", "/pattern", bytes.NewBufferString(replacement))
 	if err != nil {
 		t.Error(t)
 	}
 
-	// TODO: make these equal in order.
+	// retrieve the pattern again
 	w4, err := makeRequest(addr, "GET", "/pattern", nil)
 	if err != nil {
 		t.Error(t)
@@ -417,4 +416,8 @@ func TestWebsocket(t *testing.T) {
 		log.Fatal("dial:", err)
 	}
 	defer c.Close()
+
+	// subscribe to "test_group"
+	c.WriteJSON(Element{ID: refElementID("test_group")})
+
 }

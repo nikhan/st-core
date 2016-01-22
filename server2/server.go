@@ -56,29 +56,33 @@ func (s *Server) MelodyConnect(session *melody.Session) {
 			session.Write(out)
 		}
 	}()
+	log.Println("WebSocket: Connect", s.hub.wsPubSub[session])
 }
 
 func (s *Server) MelodyDisconnect(session *melody.Session) {
 	s.hub.Lock()
 	defer s.hub.Unlock()
+	log.Println("WebSocket: Disconnect", s.hub.wsPubSub[session])
 	s.graph.Unsubscribe(s.hub.wsPubSub[session])
 	close(s.hub.wsPubSub[session])
 	delete(s.hub.wsPubSub, session)
 }
 
 func (s *Server) MelodyError(session *melody.Session, err error) {
-	log.Println(err)
+	log.Println("WebSocket:", err)
+	if _, ok := s.hub.wsPubSub[session]; ok {
+		s.MelodyDisconnect(session)
+	}
 }
 
 func (s *Server) MelodyMessage(session *melody.Session, msg []byte) {
-	req := &Element{}
+	req := &Update{}
 	err := json.Unmarshal(msg, &req)
 	if err != nil {
 		return
 	}
 	// TODO: check ID
 	s.graph.Subscribe(string(*req.ID), s.hub.wsPubSub[session])
-	//s.m.Broadcast([]byte(*req.ID))
 }
 
 func (s *Server) WebSocketHandler(w http.ResponseWriter, r *http.Request) {
