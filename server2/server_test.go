@@ -7,14 +7,134 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"net"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"reflect"
 	"testing"
 
 	"github.com/gorilla/websocket"
 )
+
+type idReq struct {
+	id   string
+	body string
+}
+
+type idRouteReq struct {
+	id    string
+	route string
+	body  string
+}
+
+var pattern = []string{
+	`[{"id":"test_first","type":"block","spec":"first"}]`,
+	`[{"id":"test_latch","type":"block","spec":"latch"}]`,
+	`[{"id":"test_increment","type":"block","spec":"+"}]`,
+	`[{"id":"test_increment_delay","type":"block","spec":"delay"}]`,
+	`[{"id":"test_value_get","type":"block","spec":"valueGet"}]`,
+	`[{"id":"test_value_set","type":"block","spec":"valueSet"}]`,
+	`[{"id":"test_value","type":"source","spec":"value"}]`,
+	`[{"id":"test_delay_value","type":"block","spec":"delay"}]`,
+	`[{"id":"test_log","type":"block","spec":"log"}]`,
+	`[{"id":"test_sink","type":"block","spec":"sink"}]`,
+	`[{"type":"connection","source_id":"2","target_id":"4"}]`,
+	`[{"type":"connection","source_id":"5","target_id":"7"}]`,
+	`[{"type":"connection","source_id":"9","target_id":"10"}]`,
+	`[{"type":"connection","source_id":"12","target_id":"7"}]`,
+	`[{"type":"connection","source_id":"9","target_id":"16"}]`,
+	`[{"type":"link","source_id":"19","target_id":"18"}]`,
+	`[{"type":"link","source_id":"19","target_id":"15"}]`,
+	`[{"type":"connection","source_id":"14","target_id":"23"}]`,
+	`[{"type":"connection","source_id":"22","target_id":"13"}]`,
+	`[{"type":"connection","source_id":"17","target_id":"24"}]`,
+	`[{"id":"init","type":"group","children":[{"id":"test_first"},{"id":"test_latch"}]}]`,
+	`[{"id":"inc","type":"group","children":[{"id":"test_increment"},{"id":"test_increment_delay"}]}]`,
+	`[{"id":"logger","type":"group","children":[{"id":"test_value_get"},{"id":"test_value_set"},{"id":"test_delay_value"},{"id":"test_value"},{"id":"test_log"},{"id":"test_sink"}]}]`,
+	`[{"id":"test_pattern","type":"group","children":[{"id":"init"},{"id":"inc"},{"id":"logger"}]}]`,
+}
+
+var values = []idReq{
+	idReq{
+		id:   "1",
+		body: `{"value":{"data":true}}`,
+	},
+	idReq{
+		id:   "8",
+		body: `{"value":{"data":1}}`,
+	},
+	idReq{
+		id:   "11",
+		body: `{"value":{"data":"1s"}}`,
+	},
+	idReq{
+		id:   "21",
+		body: `{"value":{"data":"250ms"}}`,
+	},
+}
+
+var hide = []idRouteReq{
+	idRouteReq{
+		id:    "logger",
+		route: "13",
+		body:  `{"hidden":true}`,
+	},
+	idRouteReq{
+		id:    "logger",
+		route: "14",
+		body:  `{"hidden":true}`,
+	},
+	idRouteReq{
+		id:    "logger",
+		route: "15",
+		body:  `{"hidden":true}`,
+	},
+	idRouteReq{
+		id:    "logger",
+		route: "21",
+		body:  `{"hidden":true}`,
+	},
+	idRouteReq{
+		id:    "logger",
+		route: "22",
+		body:  `{"hidden":true}`,
+	},
+	idRouteReq{
+		id:    "logger",
+		route: "19",
+		body:  `{"hidden":true}`,
+	},
+	idRouteReq{
+		id:    "logger",
+		route: "17",
+		body:  `{"hidden":true}`,
+	},
+	idRouteReq{
+		id:    "logger",
+		route: "18",
+		body:  `{"hidden":true}`,
+	},
+	idRouteReq{
+		id:    "logger",
+		route: "23",
+		body:  `{"hidden":true}`,
+	},
+	idRouteReq{
+		id:    "inc",
+		route: "8",
+		body:  `{"hidden":true}`,
+	},
+	idRouteReq{
+		id:    "logger",
+		route: "16",
+		body:  `{"alias":"save value"}`,
+	},
+	idRouteReq{
+		id:    "inc",
+		route: "9",
+		body:  `{"alias":"++"}`,
+	},
+}
 
 func makeRequest(host string, method string, path string, body io.Reader) (*http.Response, error) {
 	requestURL := fmt.Sprintf("http://%s%s", host, path)
@@ -54,167 +174,16 @@ func dump(filename string, left []byte) {
 }
 
 func TestServer(t *testing.T) {
-	type idReq struct {
-		id   string
-		body string
-	}
-
-	type idRouteReq struct {
-		id    string
-		route string
-		body  string
-	}
-
-	var pattern = []string{
-		`[{"id":"test_first","type":"block","spec":"first"}]`,
-		`[{"id":"test_latch","type":"block","spec":"latch"}]`,
-		`[{"id":"test_increment","type":"block","spec":"+"}]`,
-		`[{"id":"test_increment_delay","type":"block","spec":"delay"}]`,
-		`[{"id":"test_value_get","type":"block","spec":"valueGet"}]`,
-		`[{"id":"test_value_set","type":"block","spec":"valueSet"}]`,
-		`[{"id":"test_value","type":"source","spec":"value"}]`,
-		`[{"id":"test_delay_value","type":"block","spec":"delay"}]`,
-		`[{"id":"test_log","type":"block","spec":"log"}]`,
-		`[{"id":"test_sink","type":"block","spec":"sink"}]`,
-		`[{"type":"connection","source_id":"2","target_id":"4"}]`,
-		`[{"type":"connection","source_id":"5","target_id":"7"}]`,
-		`[{"type":"connection","source_id":"9","target_id":"10"}]`,
-		`[{"type":"connection","source_id":"12","target_id":"7"}]`,
-		`[{"type":"connection","source_id":"9","target_id":"16"}]`,
-		`[{"type":"link","source_id":"19","target_id":"18"}]`,
-		`[{"type":"link","source_id":"19","target_id":"15"}]`,
-		`[{"type":"connection","source_id":"14","target_id":"23"}]`,
-		`[{"type":"connection","source_id":"22","target_id":"13"}]`,
-		`[{"type":"connection","source_id":"17","target_id":"24"}]`,
-		`[{"id":"init","type":"group","children":[{"id":"test_first"},{"id":"test_latch"}]}]`,
-		`[{"id":"inc","type":"group","children":[{"id":"test_increment"},{"id":"test_increment_delay"}]}]`,
-		`[{"id":"logger","type":"group","children":[{"id":"test_value_get"},{"id":"test_value_set"},{"id":"test_delay_value"},{"id":"test_value"},{"id":"test_log"},{"id":"test_sink"}]}]`,
-		`[{"id":"test_pattern","type":"group","children":[{"id":"init"},{"id":"inc"},{"id":"logger"}]}]`,
-	}
-
-	var values = []idReq{
-		idReq{
-			id:   "1",
-			body: `{"value":{"data":true}}`,
-		},
-		idReq{
-			id:   "8",
-			body: `{"value":{"data":1}}`,
-		},
-		idReq{
-			id:   "11",
-			body: `{"value":{"data":"1s"}}`,
-		},
-		idReq{
-			id:   "21",
-			body: `{"value":{"data":"250ms"}}`,
-		},
-	}
-
-	var hide = []idRouteReq{
-		idRouteReq{
-			id:    "logger",
-			route: "13",
-			body:  `{"hidden":true}`,
-		},
-		idRouteReq{
-			id:    "logger",
-			route: "14",
-			body:  `{"hidden":true}`,
-		},
-		idRouteReq{
-			id:    "logger",
-			route: "15",
-			body:  `{"hidden":true}`,
-		},
-		idRouteReq{
-			id:    "logger",
-			route: "21",
-			body:  `{"hidden":true}`,
-		},
-		idRouteReq{
-			id:    "logger",
-			route: "22",
-			body:  `{"hidden":true}`,
-		},
-		idRouteReq{
-			id:    "logger",
-			route: "19",
-			body:  `{"hidden":true}`,
-		},
-		idRouteReq{
-			id:    "logger",
-			route: "17",
-			body:  `{"hidden":true}`,
-		},
-		idRouteReq{
-			id:    "logger",
-			route: "18",
-			body:  `{"hidden":true}`,
-		},
-		idRouteReq{
-			id:    "logger",
-			route: "23",
-			body:  `{"hidden":true}`,
-		},
-		idRouteReq{
-			id:    "inc",
-			route: "8",
-			body:  `{"hidden":true}`,
-		},
-		idRouteReq{
-			id:    "logger",
-			route: "16",
-			body:  `{"alias":"save value"}`,
-		},
-		idRouteReq{
-			id:    "inc",
-			route: "9",
-			body:  `{"alias":"++"}`,
-		},
-	}
-
-	//server := NewServer()
-	//addr := server.NewRouter()
-
-	// start the server
-	server := NewServer()
-	router := server.NewRouter()
-
-	http.Handle("/", router)
-
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	s := NewServer()
+	router := s.NewRouter()
+	server := httptest.NewServer(router)
+	defer server.Close()
+	serverURL, err := url.Parse(server.URL)
 	if err != nil {
-		log.Fatal("Listen:", err)
+		t.Error(err)
 	}
-
-	addr := listener.Addr().String()
-	fmt.Println(addr)
-	go func(l net.Listener) {
-		err := http.Serve(l, nil)
-		if err != nil {
-			log.Panicf(err.Error())
-		}
-	}(listener)
-
-	u := url.URL{Scheme: "ws", Host: addr, Path: "/ws"}
-	log.Printf("connecting to %s", u.String())
-
-	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
-	if err != nil {
-		log.Fatal("dial:", err)
-	}
-	defer c.Close()
-
-	go func() {
-		for {
-			_, p, err := c.ReadMessage()
-			if err != nil {
-				return
-			}
-			fmt.Println(string(p))
-		}
-	}()
+	addr := serverURL.Host
+	log.Printf("test server running: %s", addr)
 
 	// import all elements
 	for _, s := range pattern {
@@ -247,8 +216,6 @@ func TestServer(t *testing.T) {
 	if err != nil {
 		t.Error("could not decode body of test pattern, ", err)
 	}
-
-	//fmt.Println(string(w.Body.Bytes()))
 
 	elm := findElement("test_pattern", test_pattern)
 	testPatternRoutesLength := len(elm.Routes)
@@ -428,4 +395,26 @@ func TestServer(t *testing.T) {
 		dump("body4.json", body4)
 		t.Error("exported bodies are not the same length")
 	}
+}
+
+func TestWebsocket(t *testing.T) {
+	s := NewServer()
+	router := s.NewRouter()
+	server := httptest.NewServer(router)
+	defer server.Close()
+	serverURL, err := url.Parse(server.URL)
+	if err != nil {
+		t.Error(err)
+	}
+	addr := serverURL.Host
+	log.Printf("test server running: %s", addr)
+
+	u := url.URL{Scheme: "ws", Host: addr, Path: "/ws"}
+	log.Printf("connecting to %s", u.String())
+
+	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
+	if err != nil {
+		log.Fatal("dial:", err)
+	}
+	defer c.Close()
 }
