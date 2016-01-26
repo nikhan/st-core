@@ -12,83 +12,20 @@ import (
 	"github.com/nytlabs/st-core/core"
 )
 
-func refString(s string) *string {
+func pString(s string) *string {
 	return &s
 }
 
-func refElementID(id ElementID) *ElementID {
+func pElementID(id ElementID) *ElementID {
 	return &id
 }
 
-func refInt(i int) *int {
+func pInt(i int) *int {
 	return &i
 }
 
-func refBool(b bool) *bool {
+func pBool(b bool) *bool {
 	return &b
-}
-
-type PubSubMessage struct {
-	Topic   string
-	Message interface{}
-}
-
-type PubSub struct {
-	sync.Mutex
-	topics  map[string]map[chan interface{}]struct{}
-	publish chan *PubSubMessage
-}
-
-func NewPubSub() *PubSub {
-	pb := PubSub{
-		topics:  make(map[string]map[chan interface{}]struct{}),
-		publish: make(chan *PubSubMessage),
-	}
-	go pb.listen()
-	return &pb
-}
-
-func (p *PubSub) listen() {
-	for {
-		select {
-		case m := <-p.publish:
-			if subscribers, ok := p.topics[m.Topic]; ok {
-				for subscriber, _ := range subscribers {
-					subscriber <- m.Message
-				}
-			}
-		}
-	}
-}
-
-func (p *PubSub) Subscribe(topic string, subscription chan interface{}) {
-	p.Lock()
-	defer p.Unlock()
-	if _, ok := p.topics[topic]; !ok {
-		p.topics[topic] = make(map[chan interface{}]struct{})
-	}
-	p.topics[topic][subscription] = struct{}{}
-}
-
-func (p *PubSub) Unsubscribe(subscription chan interface{}) error {
-	p.Lock()
-	defer p.Unlock()
-	for _, topic := range p.topics {
-		for subscriber, _ := range topic {
-			if subscriber == subscription {
-				delete(topic, subscription)
-				return nil
-			}
-		}
-	}
-	return errors.New("could not delete channel, does not exist")
-}
-
-func (p *PubSub) Publish(topic string, message interface{}) {
-	p.publish <- &PubSubMessage{
-		Topic:   topic,
-		Message: message,
-	}
 }
 
 type Graph struct {
@@ -106,7 +43,8 @@ type Graph struct {
 
 // NewGraph returns a reference to an initialized Graph
 func NewGraph() *Graph {
-	return &Graph{
+	pubsub := NewPubSub()
+	graph := &Graph{
 		elements:       make(map[ElementID]*Element),
 		elementParent:  make(map[ElementID]ElementID),
 		routeToEdge:    make(map[ElementID]map[ElementID]struct{}),
@@ -115,7 +53,59 @@ func NewGraph() *Graph {
 		index:          0,
 		blockLibrary:   core.GetLibrary(),
 		sourceLibrary:  core.GetSources(),
-		PubSub:         NewPubSub(),
+		PubSub:         pubsub,
+	}
+
+	pubsub.OnSubscribe = graph.onSubscribe
+
+	return graph
+}
+
+// given a group ID, find get all 1st degree children and 1st degree child routes.
+// also retrieve relevant connections
+func (g *Graph) getGroupElements(id ElementID) []*Element {
+	elements := []*Element{}
+
+	for _, child := range g.elements[id].Children {
+		childElement := g.elements[*child.ID]
+		if childElement.isNode() {
+			for _, route := range childElement.Routes {
+				// don't send hidden routes to client
+				// unsure about this
+				if route.Hidden == nil || *route.Hidden == false {
+					elements = append(elements, g.elements[*route.ID])
+				}
+			}
+		}
+		elements = append(elements, g.elements[*child.ID])
+	}
+
+	return elements
+}
+
+// called upon a new subscription
+func (g *Graph) onSubscribe(topic string, subscription chan interface{}) {
+	id := ElementID(topic)
+
+	element, ok := g.elements[id]
+	if !ok {
+		// there is nothing to subscribe to, we should create a
+		// group if there is nothing to subscribe to
+		return
+	}
+
+	if *element.Type != GROUP {
+		// element is not a group, there is nothing we can do.
+		// TODO: handle this error
+		return
+	}
+
+	g.Lock()
+	defer g.Unlock()
+
+	subscription <- Update{
+		Action: pString("create"), // TODO make constant for this
+		Data:   g.getGroupElements(id),
 	}
 }
 
@@ -244,9 +234,9 @@ func (g *Graph) addRouteAscending(parent ElementID, route ElementID) error {
 	groupRoute, ok := g.elements[parent].GetRoute(route)
 	if !ok {
 		g.elements[parent].Routes = append(g.elements[parent].Routes, &ElementItem{
-			ID:     refElementID(route),
-			Hidden: refBool(hidden),
-			Alias:  refString(""),
+			ID:     pElementID(route),
+			Hidden: pBool(hidden),
+			Alias:  pString(""),
 		})
 
 		sort.Sort(ByID(g.elements[parent].Routes))
@@ -270,11 +260,6 @@ func (g *Graph) deleteRouteAscending(parent ElementID, route ElementID) error {
 		return err
 	}
 
-	//group, ok := g.elements[parent].(*Group)
-	//if !ok {
-	//	return errors.New(fmt.Sprintf("deleteRouteAscending: %s not a group", parent))
-	//}
-
 	index := -1
 	for i, r := range g.elements[parent].Routes {
 		if *r.ID == route {
@@ -283,7 +268,7 @@ func (g *Graph) deleteRouteAscending(parent ElementID, route ElementID) error {
 	}
 
 	if index == -1 {
-		return errors.New(fmt.Sprintf("deleteRouteAscending: %s does not have route %s", parent, route))
+		return fmt.Errorf("deleteRouteAscending: %s does not have route %s", parent, route)
 	}
 
 	g.elements[parent].Routes = append(g.elements[parent].Routes[:index], g.elements[parent].Routes[index+1:]...)
@@ -303,7 +288,7 @@ func (g *Graph) deleteRouteAscending(parent ElementID, route ElementID) error {
 func (g *Graph) addChild(parent ElementID, child ElementID) {
 	group := g.elements[parent]
 	node := g.elements[child]
-	group.Children = append(group.Children, &ElementItem{ID: refElementID(child)})
+	group.Children = append(group.Children, &ElementItem{ID: pElementID(child)})
 	sort.Sort(ByID(group.Children))
 
 	g.elementParent[child] = parent

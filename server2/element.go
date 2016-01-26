@@ -68,9 +68,9 @@ func (e *Element) isNode() bool {
 }
 
 type Update struct {
-	ID       *ElementID       `json:"id"`
+	ID       *ElementID       `json:"id,omitempty"`
 	Action   *string          `json:"action"`
-	Data     []Element        `json:"data,omitempty"`
+	Data     []*Element       `json:"data,omitempty"`
 	Alias    *string          `json:"alias,omitempty"`
 	Position *Position        `json:"position,omitempty"`
 	Value    *core.InputValue `json:"value,omitempty"`

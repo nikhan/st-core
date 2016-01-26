@@ -417,7 +417,39 @@ func TestWebsocket(t *testing.T) {
 	}
 	defer c.Close()
 
-	// subscribe to "test_group"
-	c.WriteJSON(Element{ID: refElementID("test_group")})
+	// import all elements
+	for _, s := range pattern {
+		w, err := makeRequest(addr, "POST", "/pattern", bytes.NewBufferString(s))
+		if err != nil || w.StatusCode != 200 {
+			t.Error("error with response", err)
+		}
+	}
 
+	// set all values
+	for _, s := range values {
+		w, err := makeRequest(addr, "PUT", fmt.Sprintf("/pattern/%s", s.id), bytes.NewBufferString(s.body))
+		if err != nil || w.StatusCode != 200 {
+			t.Error("error with response", err)
+		}
+	}
+
+	// hide routes
+	for _, s := range hide {
+		w, err := makeRequest(addr, "PUT", fmt.Sprintf("/pattern/%s/route/%s", s.id, s.route), bytes.NewBufferString(s.body))
+		if err != nil || w.StatusCode != 200 {
+			t.Error("error with response", err)
+		}
+	}
+
+	// retrieve test_pattern element
+	w, err := makeRequest(addr, "GET", "/pattern/test_pattern", nil)
+	if err != nil || w.StatusCode != 200 {
+		t.Error("error with response", err)
+	}
+
+	// subscribe to "test_group"
+	c.WriteJSON(Element{ID: pElementID("test_pattern")})
+
+	_, p, err := c.ReadMessage()
+	fmt.Println(string(p))
 }
