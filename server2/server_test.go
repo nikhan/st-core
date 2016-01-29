@@ -388,6 +388,8 @@ func TestServer(t *testing.T) {
 		t.Error(err)
 	}
 
+	fmt.Println(string(body4))
+
 	// imported pattern should be same as original pattern
 	if body4 == nil || !bytes.Equal(body, body4) {
 		dump("body.json", body)
@@ -451,5 +453,43 @@ func TestWebsocket(t *testing.T) {
 	c.WriteJSON(Element{ID: pElementID("test_pattern")})
 
 	_, p, err := c.ReadMessage()
-	fmt.Println(string(p))
+
+	expected := `{"action":"create","data":[{"id":"7","type":"route","json_type":"number","direction":"input","name":"x"},{"id":"28","type":"connection","source_id":"12","target_id":"7"},{"id":"26","type":"connection","source_id":"5","target_id":"7"},{"id":"8","type":"route","json_type":"number","direction":"input","name":"y","value":{"data":1}},{"id":"9","type":"route","json_type":"number","direction":"output","name":"x+y"},{"id":"29","type":"connection","source_id":"9","target_id":"16"},{"id":"27","type":"connection","source_id":"9","target_id":"10"},{"id":"test_increment","type":"block","spec":"+","position":{"x":0,"y":0},"routes":[{"id":"7"},{"id":"8"},{"id":"9"}]},{"id":"inc","type":"group","position":{"x":0,"y":0},"routes":[{"id":"10","hidden":false,"alias":""},{"id":"11","hidden":false,"alias":""},{"id":"12","hidden":false,"alias":""},{"id":"7","hidden":false,"alias":""},{"id":"8","hidden":true,"alias":""},{"id":"9","hidden":false,"alias":"++"}],"children":[{"id":"test_increment"},{"id":"test_increment_delay"}]},{"id":"init","type":"group","position":{"x":0,"y":0},"routes":[{"id":"1","hidden":false,"alias":""},{"id":"2","hidden":false,"alias":""},{"id":"3","hidden":false,"alias":""},{"id":"4","hidden":false,"alias":""},{"id":"5","hidden":false,"alias":""},{"id":"6","hidden":false,"alias":""}],"children":[{"id":"test_first"},{"id":"test_latch"}]},{"id":"test_pattern","type":"group","position":{"x":0,"y":0},"routes":[{"id":"1","hidden":false,"alias":""},{"id":"10","hidden":false,"alias":""},{"id":"11","hidden":false,"alias":""},{"id":"12","hidden":false,"alias":""},{"id":"16","hidden":false,"alias":""},{"id":"2","hidden":false,"alias":""},{"id":"20","hidden":false,"alias":""},{"id":"24","hidden":false,"alias":""},{"id":"3","hidden":false,"alias":""},{"id":"4","hidden":false,"alias":""},{"id":"5","hidden":false,"alias":""},{"id":"6","hidden":false,"alias":""},{"id":"7","hidden":false,"alias":""},{"id":"9","hidden":false,"alias":""}],"children":[{"id":"inc"},{"id":"init"},{"id":"logger"}]}]}`
+
+	if !bytes.Equal([]byte(expected), p) {
+		t.Error("invalid pattern returned by websocket")
+	}
+
+	// add a block to test pattern, this should fire a create event
+	block := `[{"id":"+_pill","type":"block","spec":"+"}]`
+	_, err = makeRequest(addr, "POST", "/pattern/test_pattern", bytes.NewBufferString(block))
+	if err != nil {
+		t.Error(t)
+	}
+
+	_, p, err = c.ReadMessage()
+
+	expected = `{"action":"create","data":[{"id":"+_pill","type":"block","spec":"+","position":{"x":0,"y":0},"routes":[{"id":"35"},{"id":"36"},{"id":"37"}]},{"id":"35","type":"route","json_type":"number","direction":"input","name":"x"},{"id":"36","type":"route","json_type":"number","direction":"input","name":"y"},{"id":"37","type":"route","json_type":"number","direction":"output","name":"x+y"}]}`
+
+	if !bytes.Equal([]byte(expected), p) {
+		t.Error("invalid pattern returned by websocket")
+	}
+
+	ids := url.Values{}
+	ids.Set("action", "delete")
+	ids.Add("id", "+_pill")
+
+	// delete all elements
+	_, err = makeRequest(addr, "PUT", "/pattern?"+ids.Encode(), nil)
+	if err != nil {
+		t.Error(err)
+	}
+
+	_, p, err = c.ReadMessage()
+
+	expected = `{"action":"delete","data":[{"id":"+_pill"}]}`
+
+	if !bytes.Equal([]byte(expected), p) {
+		t.Error("invalid pattern returned by websocket")
+	}
 }

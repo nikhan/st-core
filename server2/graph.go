@@ -34,7 +34,6 @@ type Graph struct {
 	elementParent  map[ElementID]ElementID
 	routeToEdge    map[ElementID]map[ElementID]struct{}
 	routeToElement map[ElementID]map[ElementID]struct{}
-	Changes        chan *PubSubMessage
 	index          int64
 	blockLibrary   map[string]core.Spec
 	sourceLibrary  map[string]core.SourceSpec
@@ -49,7 +48,6 @@ func NewGraph() *Graph {
 		elementParent:  make(map[ElementID]ElementID),
 		routeToEdge:    make(map[ElementID]map[ElementID]struct{}),
 		routeToElement: make(map[ElementID]map[ElementID]struct{}),
-		Changes:        make(chan *PubSubMessage),
 		index:          0,
 		blockLibrary:   core.GetLibrary(),
 		sourceLibrary:  core.GetSources(),
@@ -59,28 +57,6 @@ func NewGraph() *Graph {
 	pubsub.OnSubscribe = graph.onSubscribe
 
 	return graph
-}
-
-// given a group ID, find get all 1st degree children and 1st degree child routes.
-// also retrieve relevant connections
-func (g *Graph) getGroupElements(id ElementID) []*Element {
-	elements := []*Element{}
-
-	for _, child := range g.elements[id].Children {
-		childElement := g.elements[*child.ID]
-		if childElement.isNode() {
-			for _, route := range childElement.Routes {
-				// don't send hidden routes to client
-				// unsure about this
-				if route.Hidden == nil || *route.Hidden == false {
-					elements = append(elements, g.elements[*route.ID])
-				}
-			}
-		}
-		elements = append(elements, g.elements[*child.ID])
-	}
-
-	return elements
 }
 
 // called upon a new subscription
@@ -105,7 +81,7 @@ func (g *Graph) onSubscribe(topic string, subscription chan interface{}) {
 
 	subscription <- Update{
 		Action: pString("create"), // TODO make constant for this
-		Data:   g.getGroupElements(id),
+		Data:   g.getElement(id, false, 2),
 	}
 }
 
@@ -646,13 +622,6 @@ func (g *Graph) Add(elements []*Element, parent *ElementID) ([]*ElementItem, err
 			g.addRoute(element)
 		}
 
-		//g.elements[*element.ID].SetID(*element.ID)
-		//g.elements[*element.ID].SetType(*element.Type)
-
-		//if element.Alias != nil {
-		//	g.elements[*element.ID].SetAlias(*element.Alias)
-		//}
-
 		if g.elements[*element.ID].isNode() {
 			if element.Position == nil {
 				element.Position = &Position{
@@ -673,48 +642,36 @@ func (g *Graph) Add(elements []*Element, parent *ElementID) ([]*ElementItem, err
 		}
 	}
 
-	// TO BE FIXED
 	if parent != nil {
-		g.Publish(string(*parent), newIDs)
+		updateElements := make([]*Element, len(newIDs))
+		for i, item := range newIDs {
+			updateElements[i] = g.elements[*item.ID]
+		}
+		g.Publish(string(*parent), Update{
+			Action: pString("create"),
+			Data:   updateElements,
+		})
 	}
+	//TODO: Handle case for groups being added to 'null' parent
 
 	return newIDs, nil
 }
 
-/*func (g *Graph) recurseGetElements2(id ElementID) map[ElementID]struct{} {
-	elements := make(map[ElementID]struct{})
-
-	switch elem := g.elements[id].(type) {
-	case *Group:
-		for _, child := range elem.Children {
-			children := g.recurseGetElements2(child.ID)
-			for id, _ := range children {
-				elements[id] = struct{}{}
-			}
-		}
-	case Nodes:
-		for _, route := range elem.GetRoutes() {
-			elements[route.ID] = struct{}{}
-			for conn, _ := range g.routeToEdge[route.ID] {
-				elements[conn.(Elements).GetID()] = struct{}{}
-			}
-		}
-	}
-
-	elements[id] = struct{}{}
-	return elements
-}*/
-
-func (g *Graph) recurseGetElements(id ElementID) ([]*Element, map[ElementID]struct{}) {
+func (g *Graph) recurseGetElements(id ElementID, depth int) ([]*Element, map[ElementID]struct{}) {
 	elements := []*Element{}
 	connections := make(map[ElementID]struct{})
 
 	if *g.elements[id].Type == GROUP {
 		for _, child := range g.elements[id].Children {
-			childElements, childConnections := g.recurseGetElements(*child.ID)
-			elements = append(elements, childElements...)
-			for id, _ := range childConnections {
-				connections[id] = struct{}{}
+			if depth == -1 || depth > 0 {
+				if depth != -1 {
+					depth--
+				}
+				childElements, childConnections := g.recurseGetElements(*child.ID, depth)
+				elements = append(elements, childElements...)
+				for id, _ := range childConnections {
+					connections[id] = struct{}{}
+				}
 			}
 		}
 	} else if g.elements[id].isNode() {
@@ -734,8 +691,8 @@ func (g *Graph) recurseGetElements(id ElementID) ([]*Element, map[ElementID]stru
 // if edgeInclusive is true, only return edges where both source and target are
 // present inside the returned set of elements. if edgeInclusive is false,
 // return all connected affiliated with the element and the element's children
-func (g *Graph) getElement(id ElementID, edgeInclusive bool) []*Element {
-	re, rc := g.recurseGetElements(id)
+func (g *Graph) getElement(id ElementID, edgeInclusive bool, depth int) []*Element {
+	re, rc := g.recurseGetElements(id, depth)
 	final := []*Element{}
 
 	// basic lexical sort to ensure that we always have the same ordering
@@ -764,7 +721,7 @@ func (g *Graph) getElement(id ElementID, edgeInclusive bool) []*Element {
 					tFound = true
 				}
 			}
-			if edgeInclusive && sFound && tFound || !edgeInclusive {
+			if edgeInclusive && sFound && tFound || (!edgeInclusive && (sFound || tFound)) {
 				final = append(final, g.elements[id])
 				connectionIDs = append(connectionIDs[:i], connectionIDs[i+1:]...)
 			}
@@ -793,11 +750,11 @@ func (g *Graph) Get(ids ...ElementID) ([]*Element, error) {
 		}
 
 		for _, id := range nullParents {
-			elements = append(elements, g.getElement(id, true)...)
+			elements = append(elements, g.getElement(id, true, -1)...)
 		}
 	} else {
 		for _, id := range ids {
-			elements = append(elements, g.getElement(id, true)...)
+			elements = append(elements, g.getElement(id, true, -1)...)
 		}
 	}
 
@@ -917,32 +874,74 @@ func (g *Graph) BatchDelete(ids []ElementID) error {
 
 	deleteIDs := make(map[ElementID]struct{})
 
+	// recurse over all elements children and related elements,
+	// and add them to items to be deleted.
 	for _, id := range ids {
-		elements := g.getElement(id, false)
+		elements := g.getElement(id, false, -1)
 		for _, e := range elements {
 			deleteIDs[*e.ID] = struct{}{}
 		}
 	}
 
+	deleteState := make(map[ElementID][]ElementID)
+
+	// remove from graph, final element clean up, and build
+	// state update message
 	for id, _ := range deleteIDs {
 		switch *g.elements[id].Type {
 		case GROUP:
+			// this might be wrong
 			for _, child := range g.elements[id].Children {
 				delete(g.elementParent, *child.ID)
 			}
 			fallthrough
 		case BLOCK, SOURCE:
-			if p, ok := g.elementParent[id]; ok {
-				g.deleteChild(p, id)
+			if parent, ok := g.elementParent[id]; ok {
+				g.deleteChild(parent, id)
+
+				// append id to delete to list of groups to be
+				// alerted by state change
+				deletes, ok := deleteState[parent]
+				if !ok {
+					deletes = []ElementID{}
+					deleteState[parent] = deletes
+				}
+
+				deleteState[parent] = append(deleteState[parent], id)
 			}
+
 		case CONNECTION, LINK:
 			delete(g.routeToEdge[*g.elements[id].TargetID], id)
 			delete(g.routeToEdge[*g.elements[id].SourceID], id)
 		case ROUTE:
+			deletes, ok := deleteState[parent]
+			if !ok {
+				deletes = []ElementID{}
+				deleteState[parent] = deletes
+			}
+
+			deleteState[parent] = append(deleteState[parent], id)
+
 			delete(g.routeToElement, id)
 		}
 		delete(g.elements, id)
 	}
+
+	// build and send state change for all elements
+	for parent, ids := range deleteState {
+		elements := make([]*Element, len(ids))
+		for i, id := range ids {
+			elements[i] = &Element{
+				ID: pElementID(id),
+			}
+		}
+
+		g.Publish(string(parent), Update{
+			Action: pString("delete"),
+			Data:   elements,
+		})
+	}
+
 	return nil
 }
 
