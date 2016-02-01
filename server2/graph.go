@@ -156,8 +156,14 @@ func (g *Graph) addBlock(e *Element) []*ElementItem {
 		e.Routes = newIDs
 	}
 
+	// add block to set of elements that each route is associated with
 	for _, route := range e.Routes {
 		g.routeToElement[*route.ID][*e.ID] = struct{}{}
+	}
+
+	// add block as direct parent of route (this never changes)
+	for _, route := range e.Routes {
+		g.elementParent[*route.ID] = *e.ID
 	}
 
 	g.elements[*e.ID] = e
@@ -192,6 +198,16 @@ func (g *Graph) addSource(e *Element) []*ElementItem {
 		}
 
 		e.Routes = newIDs
+	}
+
+	// add source to set of elements that each route is associated with
+	for _, route := range e.Routes {
+		g.routeToElement[*route.ID][*e.ID] = struct{}{}
+	}
+
+	// add block as direct parent of route (this never changes)
+	for _, route := range e.Routes {
+		g.elementParent[*route.ID] = *e.ID
 	}
 
 	g.elements[*e.ID] = e
@@ -653,7 +669,6 @@ func (g *Graph) Add(elements []*Element, parent *ElementID) ([]*ElementItem, err
 		})
 	}
 	//TODO: Handle case for groups being added to 'null' parent
-
 	return newIDs, nil
 }
 
@@ -872,22 +887,29 @@ func (g *Graph) BatchDelete(ids []ElementID) error {
 		return err
 	}
 
-	deleteIDs := make(map[ElementID]struct{})
+	deleteOrdered := []ElementID{}
 
 	// recurse over all elements children and related elements,
 	// and add them to items to be deleted.
 	for _, id := range ids {
 		elements := g.getElement(id, false, -1)
 		for _, e := range elements {
-			deleteIDs[*e.ID] = struct{}{}
+			found := false
+			for _, did := range deleteOrdered {
+				if did == *e.ID {
+					found = true
+				}
+			}
+			if !found {
+				deleteOrdered = append(deleteOrdered, *e.ID)
+			}
 		}
 	}
 
 	deleteState := make(map[ElementID][]ElementID)
-
 	// remove from graph, final element clean up, and build
 	// state update message
-	for id, _ := range deleteIDs {
+	for _, id := range deleteOrdered {
 		switch *g.elements[id].Type {
 		case GROUP:
 			// this might be wrong
@@ -914,15 +936,25 @@ func (g *Graph) BatchDelete(ids []ElementID) error {
 			delete(g.routeToEdge[*g.elements[id].TargetID], id)
 			delete(g.routeToEdge[*g.elements[id].SourceID], id)
 		case ROUTE:
-			deletes, ok := deleteState[parent]
+			parent, ok := g.elementParent[id]
 			if !ok {
-				deletes = []ElementID{}
-				deleteState[parent] = deletes
+				log.Fatalf("graph has lost sync")
+			}
+			grandparent, ok := g.elementParent[parent]
+			if !ok {
+				log.Fatalf("graph has lost sync")
 			}
 
-			deleteState[parent] = append(deleteState[parent], id)
+			deletes, ok := deleteState[grandparent]
+			if !ok {
+				deletes = []ElementID{}
+				deleteState[grandparent] = deletes
+			}
+
+			deleteState[grandparent] = append(deleteState[grandparent], id)
 
 			delete(g.routeToElement, id)
+			delete(g.elementParent, id)
 		}
 		delete(g.elements, id)
 	}

@@ -318,6 +318,7 @@ func TestServer(t *testing.T) {
 
 	ce, _ := decode(zbb, []*Element{})
 	if len(*ce.(*[]*Element)) > 0 {
+		fmt.Println(string(zbb))
 		t.Error("delete did not remove all elements")
 	}
 
@@ -387,8 +388,6 @@ func TestServer(t *testing.T) {
 	if err != nil {
 		t.Error(err)
 	}
-
-	fmt.Println(string(body4))
 
 	// imported pattern should be same as original pattern
 	if body4 == nil || !bytes.Equal(body, body4) {
@@ -487,7 +486,9 @@ func TestWebsocket(t *testing.T) {
 
 	_, p, err = c.ReadMessage()
 
-	expected = `{"action":"delete","data":[{"id":"+_pill"}]}`
+	fmt.Println(string(p))
+
+	expected = `{"action":"delete","data":[{"id":"35"},{"id":"36"},{"id":"37"},{"id":"+_pill"}]}`
 
 	if !bytes.Equal([]byte(expected), p) {
 		t.Error("invalid pattern returned by websocket")
