@@ -81,7 +81,7 @@ func (g *Graph) onSubscribe(topic string, subscription chan interface{}) {
 
 	subscription <- Update{
 		Action: pString("create"), // TODO make constant for this
-		Data:   g.getElement(id, false, 2),
+		Data:   g.getElement(id, false, 1),
 	}
 }
 
@@ -676,19 +676,18 @@ func (g *Graph) recurseGetElements(id ElementID, depth int) ([]*Element, map[Ele
 	elements := []*Element{}
 	connections := make(map[ElementID]struct{})
 
-	if *g.elements[id].Type == GROUP {
+	if *g.elements[id].Type == GROUP && (depth == -1 || depth > 0) {
+		if depth != -1 {
+			depth--
+		}
 		for _, child := range g.elements[id].Children {
-			if depth == -1 || depth > 0 {
-				if depth != -1 {
-					depth--
-				}
-				childElements, childConnections := g.recurseGetElements(*child.ID, depth)
-				elements = append(elements, childElements...)
-				for id, _ := range childConnections {
-					connections[id] = struct{}{}
-				}
+			childElements, childConnections := g.recurseGetElements(*child.ID, depth)
+			elements = append(elements, childElements...)
+			for id, _ := range childConnections {
+				connections[id] = struct{}{}
 			}
 		}
+
 	} else if g.elements[id].isNode() {
 		for _, route := range g.elements[id].Routes {
 			elements = append(elements, g.elements[*route.ID])
@@ -696,6 +695,7 @@ func (g *Graph) recurseGetElements(id ElementID, depth int) ([]*Element, map[Ele
 				connections[cid] = struct{}{}
 			}
 		}
+
 	}
 
 	elements = append(elements, g.elements[id])

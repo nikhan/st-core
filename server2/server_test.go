@@ -27,6 +27,12 @@ type idRouteReq struct {
 	body  string
 }
 
+var smallPattern = []string{
+	`[{"id":"test_first","type":"block","spec":"first"}]`,
+	`[{"id":"test_latch","type":"block","spec":"latch"}]`,
+	`[{"id":"test_group","type":"group","children":[{"id":"test_first"},{"id":"test_latch"}]}]`,
+}
+
 var pattern = []string{
 	`[{"id":"test_first","type":"block","spec":"first"}]`,
 	`[{"id":"test_latch","type":"block","spec":"latch"}]`,
@@ -171,6 +177,46 @@ func findElement(id string, pattern interface{}) *Element {
 
 func dump(filename string, left []byte) {
 	ioutil.WriteFile(filename, left, 0644)
+}
+
+func TestSmallPattern(t *testing.T) {
+	s := NewServer()
+	router := s.NewRouter()
+	server := httptest.NewServer(router)
+	defer server.Close()
+	serverURL, err := url.Parse(server.URL)
+	if err != nil {
+		t.Error(err)
+	}
+	addr := serverURL.Host
+	log.Printf("test server running: %s", addr)
+
+	// import all elements
+	for _, s := range smallPattern {
+		w, err := makeRequest(addr, "POST", "/pattern", bytes.NewBufferString(s))
+		if err != nil || w.StatusCode != 200 {
+			t.Error("error with response", err)
+		}
+	}
+
+	// retrieve test_pattern element
+	w, err := makeRequest(addr, "GET", "/pattern/test_group", nil)
+	if err != nil || w.StatusCode != 200 {
+		t.Error("error with response", err)
+	}
+
+	body, err := ioutil.ReadAll(w.Body)
+	if err != nil {
+		t.Error(err)
+	}
+
+	expected := `[{"id":"1","type":"route","json_type":"any","direction":"input","name":"in"},{"id":"2","type":"route","json_type":"boolean","direction":"output","name":"first"},{"id":"test_first","type":"block","spec":"first","position":{"x":0,"y":0},"routes":[{"id":"1"},{"id":"2"}]},{"id":"3","type":"route","json_type":"any","direction":"input","name":"in"},{"id":"4","type":"route","json_type":"boolean","direction":"input","name":"ctrl"},{"id":"5","type":"route","json_type":"any","direction":"output","name":"true"},{"id":"6","type":"route","json_type":"any","direction":"output","name":"false"},{"id":"test_latch","type":"block","spec":"latch","position":{"x":0,"y":0},"routes":[{"id":"3"},{"id":"4"},{"id":"5"},{"id":"6"}]},{"id":"test_group","type":"group","position":{"x":0,"y":0},"routes":[{"id":"1","hidden":false,"alias":""},{"id":"2","hidden":false,"alias":""},{"id":"3","hidden":false,"alias":""},{"id":"4","hidden":false,"alias":""},{"id":"5","hidden":false,"alias":""},{"id":"6","hidden":false,"alias":""}],"children":[{"id":"test_first"},{"id":"test_latch"}]}]`
+
+	// compare, these should be the exactly the same
+	if body == nil || !bytes.Equal([]byte(expected), bytes.TrimSpace(body)) {
+		t.Error("exported bodies are not the same length")
+	}
+
 }
 
 func TestServer(t *testing.T) {
@@ -453,7 +499,7 @@ func TestWebsocket(t *testing.T) {
 
 	_, p, err := c.ReadMessage()
 
-	expected := `{"action":"create","data":[{"id":"7","type":"route","json_type":"number","direction":"input","name":"x"},{"id":"28","type":"connection","source_id":"12","target_id":"7"},{"id":"26","type":"connection","source_id":"5","target_id":"7"},{"id":"8","type":"route","json_type":"number","direction":"input","name":"y","value":{"data":1}},{"id":"9","type":"route","json_type":"number","direction":"output","name":"x+y"},{"id":"29","type":"connection","source_id":"9","target_id":"16"},{"id":"27","type":"connection","source_id":"9","target_id":"10"},{"id":"test_increment","type":"block","spec":"+","position":{"x":0,"y":0},"routes":[{"id":"7"},{"id":"8"},{"id":"9"}]},{"id":"inc","type":"group","position":{"x":0,"y":0},"routes":[{"id":"10","hidden":false,"alias":""},{"id":"11","hidden":false,"alias":""},{"id":"12","hidden":false,"alias":""},{"id":"7","hidden":false,"alias":""},{"id":"8","hidden":true,"alias":""},{"id":"9","hidden":false,"alias":"++"}],"children":[{"id":"test_increment"},{"id":"test_increment_delay"}]},{"id":"init","type":"group","position":{"x":0,"y":0},"routes":[{"id":"1","hidden":false,"alias":""},{"id":"2","hidden":false,"alias":""},{"id":"3","hidden":false,"alias":""},{"id":"4","hidden":false,"alias":""},{"id":"5","hidden":false,"alias":""},{"id":"6","hidden":false,"alias":""}],"children":[{"id":"test_first"},{"id":"test_latch"}]},{"id":"test_pattern","type":"group","position":{"x":0,"y":0},"routes":[{"id":"1","hidden":false,"alias":""},{"id":"10","hidden":false,"alias":""},{"id":"11","hidden":false,"alias":""},{"id":"12","hidden":false,"alias":""},{"id":"16","hidden":false,"alias":""},{"id":"2","hidden":false,"alias":""},{"id":"20","hidden":false,"alias":""},{"id":"24","hidden":false,"alias":""},{"id":"3","hidden":false,"alias":""},{"id":"4","hidden":false,"alias":""},{"id":"5","hidden":false,"alias":""},{"id":"6","hidden":false,"alias":""},{"id":"7","hidden":false,"alias":""},{"id":"9","hidden":false,"alias":""}],"children":[{"id":"inc"},{"id":"init"},{"id":"logger"}]}]}`
+	expected := `{"action":"create","data":[{"id":"10","type":"route","json_type":"any","direction":"input","name":"in"},{"id":"27","type":"connection","source_id":"9","target_id":"10"},{"id":"11","type":"route","json_type":"string","direction":"input","name":"duration","value":{"data":"1s"}},{"id":"12","type":"route","json_type":"any","direction":"output","name":"out"},{"id":"28","type":"connection","source_id":"12","target_id":"7"},{"id":"7","type":"route","json_type":"number","direction":"input","name":"x"},{"id":"26","type":"connection","source_id":"5","target_id":"7"},{"id":"8","type":"route","json_type":"number","direction":"input","name":"y","value":{"data":1}},{"id":"9","type":"route","json_type":"number","direction":"output","name":"x+y"},{"id":"29","type":"connection","source_id":"9","target_id":"16"},{"id":"inc","type":"group","position":{"x":0,"y":0},"routes":[{"id":"10","hidden":false,"alias":""},{"id":"11","hidden":false,"alias":""},{"id":"12","hidden":false,"alias":""},{"id":"7","hidden":false,"alias":""},{"id":"8","hidden":true,"alias":""},{"id":"9","hidden":false,"alias":"++"}],"children":[{"id":"test_increment"},{"id":"test_increment_delay"}]},{"id":"1","type":"route","json_type":"any","direction":"input","name":"in","value":{"data":true}},{"id":"2","type":"route","json_type":"boolean","direction":"output","name":"first"},{"id":"25","type":"connection","source_id":"2","target_id":"4"},{"id":"3","type":"route","json_type":"any","direction":"input","name":"in"},{"id":"4","type":"route","json_type":"boolean","direction":"input","name":"ctrl"},{"id":"5","type":"route","json_type":"any","direction":"output","name":"true"},{"id":"6","type":"route","json_type":"any","direction":"output","name":"false"},{"id":"init","type":"group","position":{"x":0,"y":0},"routes":[{"id":"1","hidden":false,"alias":""},{"id":"2","hidden":false,"alias":""},{"id":"3","hidden":false,"alias":""},{"id":"4","hidden":false,"alias":""},{"id":"5","hidden":false,"alias":""},{"id":"6","hidden":false,"alias":""}],"children":[{"id":"test_first"},{"id":"test_latch"}]},{"id":"13","type":"route","json_type":"any","direction":"input","name":"trigger"},{"id":"33","type":"connection","source_id":"22","target_id":"13"},{"id":"14","type":"route","json_type":"any","direction":"output","name":"value"},{"id":"32","type":"connection","source_id":"14","target_id":"23"},{"id":"15","type":"route","json_type":"any","direction":"input","name":"\"value\"","source":"value"},{"id":"31","type":"link","source_id":"19","target_id":"15"},{"id":"16","type":"route","json_type":"any","direction":"input","name":"value"},{"id":"17","type":"route","json_type":"any","direction":"output","name":"out"},{"id":"34","type":"connection","source_id":"17","target_id":"24"},{"id":"18","type":"route","json_type":"any","direction":"input","name":"\"value\"","source":"value"},{"id":"30","type":"link","source_id":"19","target_id":"18"},{"id":"19","type":"route","json_type":"any","direction":"output","name":"value","source":"value"},{"id":"20","type":"route","json_type":"any","direction":"input","name":"in"},{"id":"21","type":"route","json_type":"string","direction":"input","name":"duration","value":{"data":"250ms"}},{"id":"22","type":"route","json_type":"any","direction":"output","name":"out"},{"id":"23","type":"route","json_type":"any","direction":"input","name":"log"},{"id":"24","type":"route","json_type":"any","direction":"input","name":"in"},{"id":"logger","type":"group","position":{"x":0,"y":0},"routes":[{"id":"13","hidden":true,"alias":""},{"id":"14","hidden":true,"alias":""},{"id":"15","hidden":true,"alias":""},{"id":"16","hidden":false,"alias":"save value"},{"id":"17","hidden":true,"alias":""},{"id":"18","hidden":true,"alias":""},{"id":"19","hidden":true,"alias":""},{"id":"20","hidden":false,"alias":""},{"id":"21","hidden":true,"alias":""},{"id":"22","hidden":true,"alias":""},{"id":"23","hidden":true,"alias":""},{"id":"24","hidden":false,"alias":""}],"children":[{"id":"test_delay_value"},{"id":"test_log"},{"id":"test_sink"},{"id":"test_value"},{"id":"test_value_get"},{"id":"test_value_set"}]},{"id":"test_pattern","type":"group","position":{"x":0,"y":0},"routes":[{"id":"1","hidden":false,"alias":""},{"id":"10","hidden":false,"alias":""},{"id":"11","hidden":false,"alias":""},{"id":"12","hidden":false,"alias":""},{"id":"16","hidden":false,"alias":""},{"id":"2","hidden":false,"alias":""},{"id":"20","hidden":false,"alias":""},{"id":"24","hidden":false,"alias":""},{"id":"3","hidden":false,"alias":""},{"id":"4","hidden":false,"alias":""},{"id":"5","hidden":false,"alias":""},{"id":"6","hidden":false,"alias":""},{"id":"7","hidden":false,"alias":""},{"id":"9","hidden":false,"alias":""}],"children":[{"id":"inc"},{"id":"init"},{"id":"logger"}]}]}`
 
 	if !bytes.Equal([]byte(expected), p) {
 		t.Error("invalid pattern returned by websocket")
@@ -485,8 +531,6 @@ func TestWebsocket(t *testing.T) {
 	}
 
 	_, p, err = c.ReadMessage()
-
-	fmt.Println(string(p))
 
 	expected = `{"action":"delete","data":[{"id":"35"},{"id":"36"},{"id":"37"},{"id":"+_pill"}]}`
 
