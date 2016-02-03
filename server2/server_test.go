@@ -537,4 +537,20 @@ func TestWebsocket(t *testing.T) {
 	if !bytes.Equal([]byte(expected), p) {
 		t.Error("invalid pattern returned by websocket")
 	}
+
+	update := `{"value":{"data":"250ms"}}`
+
+	_, err = makeRequest(addr, "PUT", "/pattern/11", bytes.NewBufferString(update))
+	if err != nil {
+		t.Error(t)
+	}
+
+	_, p, err = c.ReadMessage()
+
+	expected = `{"id":"11","action":"update_value","value":{"data":"250ms"}}`
+
+	if !bytes.Equal([]byte(expected), p) {
+		t.Error("invalid pattern returned by websocket")
+	}
+
 }

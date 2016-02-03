@@ -801,6 +801,13 @@ func (g *Graph) Update(id ElementID, update *Update) error {
 
 	if *g.elements[id].Type == ROUTE && update.Value != nil {
 		g.elements[id].Value = update.Value
+		for element, _ := range g.routeToElement[id] {
+			g.Publish(string(element), Update{
+				Action: pString("update_value"),
+				ID:     pElementID(id),
+				Value:  update.Value,
+			})
+		}
 	}
 
 	return nil
