@@ -234,6 +234,11 @@ func (g *Graph) addRouteAscending(parent ElementID, route ElementID) error {
 		sort.Sort(ByID(g.elements[parent].Routes))
 
 		g.routeToElement[route][parent] = struct{}{}
+
+		g.Publish(string(parent), Update{
+			Action: pString("create"),
+			Data:   []*Element{g.elements[route]},
+		})
 	} else {
 		hidden = *groupRoute.Hidden
 	}
@@ -658,7 +663,8 @@ func (g *Graph) Add(elements []*Element, parent *ElementID) ([]*ElementItem, err
 		}
 	}
 
-	if parent != nil {
+	g.wsCreateElements(newIDs)
+	/*if parent != nil {
 		updateElements := make([]*Element, len(newIDs))
 		for i, item := range newIDs {
 			updateElements[i] = g.elements[*item.ID]
@@ -667,7 +673,8 @@ func (g *Graph) Add(elements []*Element, parent *ElementID) ([]*ElementItem, err
 			Action: pString("create"),
 			Data:   updateElements,
 		})
-	}
+	}*/
+
 	//TODO: Handle case for groups being added to 'null' parent
 	return newIDs, nil
 }
@@ -827,6 +834,15 @@ func (g *Graph) UpdateGroupRoute(id ElementID, routeID ElementID, update *Update
 
 	if update.Alias != nil {
 		route.Alias = update.Alias
+
+		if parent, ok := g.elementParent[id]; ok {
+			g.Publish(string(parent), Update{
+				Action: pString("update_group_route_alias"),
+				ID:     pElementID(id),
+				Route:  pElementID(routeID),
+				Alias:  update.Alias,
+			})
+		}
 	}
 
 	if update.Hidden != nil {
@@ -837,6 +853,15 @@ func (g *Graph) UpdateGroupRoute(id ElementID, routeID ElementID, update *Update
 			} else {
 				g.addRouteAscending(g.elementParent[id], routeID)
 			}
+		}
+
+		if parent, ok := g.elementParent[id]; ok {
+			g.Publish(string(parent), Update{
+				Action: pString("update_group_route_hidden"),
+				ID:     pElementID(id),
+				Route:  pElementID(routeID),
+				Hidden: update.Hidden,
+			})
 		}
 	}
 
@@ -913,7 +938,16 @@ func (g *Graph) BatchDelete(ids []ElementID) error {
 		}
 	}
 
-	deleteState := make(map[ElementID][]ElementID)
+	// we have to signal BEFORE we delete, or else our websocket state updates
+	// won't know which parents to signal an update to. TODO: refactor
+	items := []*ElementItem{}
+	for _, id := range deleteOrdered {
+		items = append(items, &ElementItem{ID: pElementID(id)})
+	}
+
+	g.wsDeleteElements(items)
+
+	//deleteState := make(map[ElementID][]ElementID)
 	// remove from graph, final element clean up, and build
 	// state update message
 	for _, id := range deleteOrdered {
@@ -930,35 +964,35 @@ func (g *Graph) BatchDelete(ids []ElementID) error {
 
 				// append id to delete to list of groups to be
 				// alerted by state change
-				deletes, ok := deleteState[parent]
-				if !ok {
-					deletes = []ElementID{}
-					deleteState[parent] = deletes
-				}
+				//deletes, ok := deleteState[parent]
+				//if !ok {
+				//	deletes = []ElementID{}
+				//	deleteState[parent] = deletes
+				//}
 
-				deleteState[parent] = append(deleteState[parent], id)
+				//deleteState[parent] = append(deleteState[parent], id)
 			}
 
 		case CONNECTION, LINK:
 			delete(g.routeToEdge[*g.elements[id].TargetID], id)
 			delete(g.routeToEdge[*g.elements[id].SourceID], id)
 		case ROUTE:
-			parent, ok := g.elementParent[id]
-			if !ok {
-				log.Fatalf("graph has lost sync")
-			}
-			grandparent, ok := g.elementParent[parent]
-			if !ok {
-				log.Fatalf("graph has lost sync")
-			}
+			//parent, ok := g.elementParent[id]
+			//if !ok {
+			//	log.Fatalf("graph has lost sync")
+			//}
+			//grandparent, ok := g.elementParent[parent]
+			//if !ok {
+			//	log.Fatalf("graph has lost sync")
+			//}
 
-			deletes, ok := deleteState[grandparent]
-			if !ok {
-				deletes = []ElementID{}
-				deleteState[grandparent] = deletes
-			}
+			//deletes, ok := deleteState[grandparent]
+			//if !ok {
+			//	deletes = []ElementID{}
+			//	deleteState[grandparent] = deletes
+			//}
 
-			deleteState[grandparent] = append(deleteState[grandparent], id)
+			//deleteState[grandparent] = append(deleteState[grandparent], id)
 
 			delete(g.routeToElement, id)
 			delete(g.elementParent, id)
@@ -967,7 +1001,7 @@ func (g *Graph) BatchDelete(ids []ElementID) error {
 	}
 
 	// build and send state change for all elements
-	for parent, ids := range deleteState {
+	/*for parent, ids := range deleteState {
 		elements := make([]*Element, len(ids))
 		for i, id := range ids {
 			elements[i] = &Element{
@@ -979,7 +1013,7 @@ func (g *Graph) BatchDelete(ids []ElementID) error {
 			Action: pString("delete"),
 			Data:   elements,
 		})
-	}
+	}*/
 
 	return nil
 }
@@ -992,3 +1026,89 @@ func (g *Graph) BatchReset(ids []ElementID) error {
 
 	return nil
 }
+
+func (g *Graph) collateElements(elements []*ElementItem, idOnly bool) map[ElementID][]*Element {
+	parentsToUpdate := make(map[ElementID][]*Element)
+
+	// TODO this probably doesn't work for connections
+	for _, item := range elements {
+		parent, ok := g.elementParent[*item.ID]
+		if !ok {
+			continue
+		}
+
+		// the grandparent of the route is the parent we need to update
+		//if *g.elements[*item.ID].Type == ROUTE {
+		//	var ok bool
+		//	if _, ok = g.elementParent[parent]; !ok {
+		//		continue
+		//	}
+		//	parent = g.elementParent[parent]
+		//}
+
+		if _, ok := parentsToUpdate[parent]; !ok {
+			parentsToUpdate[parent] = []*Element{}
+		}
+
+		if !idOnly {
+			parentsToUpdate[parent] = append(parentsToUpdate[parent], g.elements[*item.ID])
+		} else {
+			parentsToUpdate[parent] = append(parentsToUpdate[parent], &Element{ID: item.ID})
+		}
+	}
+
+	return parentsToUpdate
+}
+
+// wsCreateElements constructs the websocket state update given a set of
+// elements that have just been created.
+func (g *Graph) wsCreateElements(elements []*ElementItem) {
+	updates := g.collateElements(elements, false)
+
+	for parent, elms := range updates {
+		g.Publish(string(parent), Update{
+			Action: pString("create"),
+			Data:   elms,
+		})
+	}
+}
+
+// wsTranslateElements constructs a websocket state update given a set
+// of elements that have been translated
+func (g *Graph) wsTranslateElements(elements []*ElementItem, x int, y int) {
+	updates := g.collateElements(elements, true)
+
+	for parent, elms := range updates {
+		g.Publish(string(parent), Update{
+			Action: pString("translate"),
+			Position: &Position{
+				X: x,
+				Y: y,
+			},
+			Data: elms,
+		})
+	}
+}
+
+// wsDeleteElements constructs a websocket state update given a set of
+// elements that have just been deleted.
+func (g *Graph) wsDeleteElements(elements []*ElementItem) {
+	updates := g.collateElements(elements, true)
+
+	for parent, elms := range updates {
+		g.Publish(string(parent), Update{
+			Action: pString("delete"),
+			Data:   elms,
+		})
+	}
+}
+
+func (g *Graph) wsElementAlias(id ElementID, alias string) {
+
+}
+
+func (g *Graph) wsElementPosition(id ElementID, position Position) {}
+
+func (g *Graph) wsGroupRouteAlias(id ElementID, route ElementID, alias string) {}
+
+func (g *Graph) wsGroupRouteHidden(id ElementID, route ElementID, hidden bool) {}

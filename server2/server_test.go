@@ -512,12 +512,37 @@ func TestWebsocket(t *testing.T) {
 		t.Error(t)
 	}
 
+	expected = `{"action":"create","data":[{"id":"35","type":"route","json_type":"number","direction":"input","name":"x"}]}`
 	_, p, err = c.ReadMessage()
-
-	expected = `{"action":"create","data":[{"id":"+_pill","type":"block","spec":"+","position":{"x":0,"y":0},"routes":[{"id":"35"},{"id":"36"},{"id":"37"}]},{"id":"35","type":"route","json_type":"number","direction":"input","name":"x"},{"id":"36","type":"route","json_type":"number","direction":"input","name":"y"},{"id":"37","type":"route","json_type":"number","direction":"output","name":"x+y"}]}`
+	fmt.Println(string(p))
 
 	if !bytes.Equal([]byte(expected), p) {
 		t.Error("invalid pattern returned by websocket")
+	}
+
+	expected = `{"action":"create","data":[{"id":"36","type":"route","json_type":"number","direction":"input","name":"y"}]}`
+	_, p, err = c.ReadMessage()
+	fmt.Println(string(p))
+
+	if !bytes.Equal([]byte(expected), p) {
+		t.Error("invalid pattern returned by websocket")
+	}
+
+	expected = `{"action":"create","data":[{"id":"37","type":"route","json_type":"number","direction":"output","name":"x+y"}]}`
+	_, p, err = c.ReadMessage()
+	fmt.Println(string(p))
+
+	if !bytes.Equal([]byte(expected), p) {
+		t.Error("invalid pattern returned by websocket")
+	}
+
+	expected = `{"action":"create","data":[{"id":"+_pill","type":"block","spec":"+","position":{"x":0,"y":0},"routes":[{"id":"35"},{"id":"36"},{"id":"37"}]}]}`
+	_, p, err = c.ReadMessage()
+	fmt.Println(string(p))
+
+	if !bytes.Equal([]byte(expected), p) {
+		t.Error("invalid pattern returned by websocket")
+		fmt.Println(string(p))
 	}
 
 	ids := url.Values{}
@@ -532,7 +557,9 @@ func TestWebsocket(t *testing.T) {
 
 	_, p, err = c.ReadMessage()
 
-	expected = `{"action":"delete","data":[{"id":"35"},{"id":"36"},{"id":"37"},{"id":"+_pill"}]}`
+	expected = `{"action":"delete","data":[{"id":"+_pill"}]}`
+
+	fmt.Println(string(p))
 
 	if !bytes.Equal([]byte(expected), p) {
 		t.Error("invalid pattern returned by websocket")
@@ -546,11 +573,58 @@ func TestWebsocket(t *testing.T) {
 	}
 
 	_, p, err = c.ReadMessage()
+	fmt.Println(string(p))
 
 	expected = `{"id":"11","action":"update_value","value":{"data":"250ms"}}`
 
 	if !bytes.Equal([]byte(expected), p) {
 		t.Error("invalid pattern returned by websocket")
 	}
+
+	showRoute := `{"hidden":false}`
+
+	_, err = makeRequest(addr, "PUT", "/pattern/logger/route/13", bytes.NewBufferString(showRoute))
+	if err != nil {
+		t.Error(t)
+	}
+
+	expected = `{"action":"create","data":[{"id":"13","type":"route","json_type":"any","direction":"input","name":"trigger"}]}`
+	_, p, err = c.ReadMessage()
+	fmt.Println(string(p))
+
+	if !bytes.Equal([]byte(expected), p) {
+		t.Error("invalid pattern returned by websocket")
+	}
+
+	expected = `{"id":"logger","route":"13","action":"update_group_route_hidden","hidden":false}`
+	_, p, err = c.ReadMessage()
+	fmt.Println(string(p))
+	if !bytes.Equal([]byte(expected), p) {
+		t.Error("invalid pattern returned by websocket")
+	}
+
+	aliasRoute := `{"alias":"route alias test"}`
+
+	_, err = makeRequest(addr, "PUT", "/pattern/logger/route/13", bytes.NewBufferString(aliasRoute))
+	if err != nil {
+		t.Error(t)
+	}
+
+	expected = `{"id":"logger","route":"13","action":"update_group_route_alias","alias":"route alias test"}`
+	_, p, err = c.ReadMessage()
+	fmt.Println(string(p))
+	if !bytes.Equal([]byte(expected), p) {
+		t.Error("invalid pattern returned by websocket")
+	}
+
+	hideRoute := `{"hidden":true}`
+
+	_, err = makeRequest(addr, "PUT", "/pattern/logger/route/13", bytes.NewBufferString(hideRoute))
+	if err != nil {
+		t.Error(t)
+	}
+
+	_, p, err = c.ReadMessage()
+	fmt.Println(string(p))
 
 }

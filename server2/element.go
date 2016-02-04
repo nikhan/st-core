@@ -69,6 +69,7 @@ func (e *Element) isNode() bool {
 
 type Update struct {
 	ID       *ElementID       `json:"id,omitempty"`
+	Route    *ElementID       `json:"route,omitempty"`
 	Action   *string          `json:"action"`
 	Data     []*Element       `json:"data,omitempty"`
 	Alias    *string          `json:"alias,omitempty"`
