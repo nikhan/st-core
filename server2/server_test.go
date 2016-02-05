@@ -619,6 +619,7 @@ func TestWebsocket(t *testing.T) {
 
 	hideRoute := `{"hidden":true}`
 
+	expected = `{"id":"logger","route":"13","action":"update_group_route_hidden","hidden":true}`
 	_, err = makeRequest(addr, "PUT", "/pattern/logger/route/13", bytes.NewBufferString(hideRoute))
 	if err != nil {
 		t.Error(t)
@@ -626,5 +627,29 @@ func TestWebsocket(t *testing.T) {
 
 	_, p, err = c.ReadMessage()
 	fmt.Println(string(p))
+	if !bytes.Equal([]byte(expected), p) {
+		t.Error("invalid pattern returned by websocket")
+	}
+
+	ids = url.Values{}
+	ids.Set("action", "translate")
+	ids.Set("x", "100")
+	ids.Set("y", "100")
+	ids.Add("id", "inc")
+	ids.Add("id", "init")
+	ids.Add("id", "logger")
+
+	// delete all elements
+	_, err = makeRequest(addr, "PUT", "/pattern?"+ids.Encode(), nil)
+	if err != nil {
+		t.Error(err)
+	}
+
+	expected = `{"action":"translate","data":[{"id":"inc"},{"id":"init"},{"id":"logger"}],"position":{"x":100,"y":100}}`
+	_, p, err = c.ReadMessage()
+	fmt.Println(string(p))
+	if !bytes.Equal([]byte(expected), p) {
+		t.Error("invalid pattern returned by websocket")
+	}
 
 }

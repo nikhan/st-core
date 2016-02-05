@@ -95,13 +95,9 @@ func (s *Server) ElementsHandler(w http.ResponseWriter, r *http.Request) {
 	s.graph.Lock()
 	defer s.graph.Unlock()
 
-	ids, err := s.graph.Add(*elements, nil)
-	if err != nil {
+	if _, err := s.graph.Add(*elements, nil); err != nil {
 		panic(err)
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(ids)
 }
 
 func (s *Server) ParentElementsHandler(w http.ResponseWriter, r *http.Request) {

@@ -92,7 +92,7 @@ func (g *Graph) generateID() ElementID {
 }
 
 // addRouteFromPins accepts a slice of core.Spec pins, a direction, and adds them to the graph.
-func (g *Graph) addRoutesFromPins(pins []core.Pin, direction string) ([]*ElementItem, error) {
+func (g *Graph) addRoutesFromPins(pins []core.Pin, direction string) ([]ElementID, error) {
 	routes := make([]*Element, len(pins))
 	elementType := ROUTE
 	for i, _ := range pins {
@@ -109,8 +109,8 @@ func (g *Graph) addRoutesFromPins(pins []core.Pin, direction string) ([]*Element
 // addBlock initializes a core.Block and adds a Block to the graph.
 // If addBlock receives a Block with no routes, it will automatically generate them from the corresponding core.Spec.
 // If addBlock receives a Block with routes, it will assume that those routes have already been created.
-func (g *Graph) addBlock(e *Element) []*ElementItem {
-	var newIDs []*ElementItem
+func (g *Graph) addBlock(e *Element) []ElementID {
+	var newIDs []ElementID
 
 	spec := g.blockLibrary[*e.Spec]
 
@@ -153,7 +153,11 @@ func (g *Graph) addBlock(e *Element) []*ElementItem {
 			newIDs = append(newIDs, sourceID[0])
 		}
 
-		e.Routes = newIDs
+		routes := make([]*ElementItem, len(newIDs))
+		for i, id := range newIDs {
+			routes[i] = &ElementItem{ID: pElementID(id)}
+		}
+		e.Routes = routes
 	}
 
 	// add block to set of elements that each route is associated with
@@ -173,8 +177,8 @@ func (g *Graph) addBlock(e *Element) []*ElementItem {
 // addSource initializes a core.Source and adds a Source to the graph.
 // TODO: addSource always adds a route to the graph regardless of whether or not the imported Source has one.
 // addSource should function similar to addBlock, and only create a new route if the imported Source does not have one.
-func (g *Graph) addSource(e *Element) []*ElementItem {
-	var newIDs []*ElementItem
+func (g *Graph) addSource(e *Element) []ElementID {
+	var newIDs []ElementID
 
 	spec := g.sourceLibrary[*e.Spec]
 
@@ -197,7 +201,12 @@ func (g *Graph) addSource(e *Element) []*ElementItem {
 			log.Fatal(err)
 		}
 
-		e.Routes = newIDs
+		routes := make([]*ElementItem, len(newIDs))
+		for i, id := range newIDs {
+			routes[i] = &ElementItem{ID: pElementID(id)}
+		}
+
+		e.Routes = routes
 	}
 
 	// add source to set of elements that each route is associated with
@@ -505,11 +514,11 @@ func validationError(index int, err error) error {
 
 // Add accepts a slice of Elements and a parent and attempts to add them to the graph.
 // TODO: validation should be moved into Add
-func (g *Graph) Add(elements []*Element, parent *ElementID) ([]*ElementItem, error) {
+func (g *Graph) Add(elements []*Element, parent *ElementID) ([]ElementID, error) {
 	oldIDs := make(map[ElementID]*ElementID)
 	children := make(map[ElementID]struct{})
 	imported := make(map[ElementID]*Element)
-	newIDs := []*ElementItem{}
+	newIDs := []ElementID{}
 
 	// if a given id doesn't exist or conflicts with present elements, make a
 	// new one.
@@ -627,7 +636,7 @@ func (g *Graph) Add(elements []*Element, parent *ElementID) ([]*ElementItem, err
 
 	// add to graph
 	for _, element := range elements {
-		var ids []*ElementItem
+		var ids []ElementID
 		switch *element.Type {
 		case BLOCK:
 			ids = g.addBlock(element)
@@ -656,7 +665,7 @@ func (g *Graph) Add(elements []*Element, parent *ElementID) ([]*ElementItem, err
 			}
 		}
 
-		newIDs = append(newIDs, &ElementItem{ID: element.ID})
+		newIDs = append(newIDs, *element.ID)
 
 		if ids != nil {
 			newIDs = append(newIDs, ids...)
@@ -753,6 +762,10 @@ func (g *Graph) getElement(id ElementID, edgeInclusive bool, depth int) []*Eleme
 	return final
 }
 
+// Get is the exported function that recursively retrieves an ID and all of its
+// children.
+// TODO: handle the error case when passed a parent and a child in the same
+// request.
 func (g *Graph) Get(ids ...ElementID) ([]*Element, error) {
 	elements := []*Element{}
 
@@ -813,6 +826,28 @@ func (g *Graph) Update(id ElementID, update *Update) error {
 				Action: pString("update_value"),
 				ID:     pElementID(id),
 				Value:  update.Value,
+			})
+		}
+	}
+
+	if g.elements[id].isNode() && update.Position != nil {
+		g.elements[id].Position = update.Position
+		if parent, ok := g.elementParent[id]; ok {
+			g.Publish(string(parent), Update{
+				Action:   pString("update_position"),
+				ID:       pElementID(id),
+				Position: update.Position,
+			})
+		}
+	}
+
+	if g.elements[id].isNode() && update.Alias != nil {
+		g.elements[id].Alias = update.Alias
+		if parent, ok := g.elementParent[id]; ok {
+			g.Publish(string(parent), Update{
+				Action: pString("update_alias"),
+				ID:     pElementID(id),
+				Alias:  update.Alias,
 			})
 		}
 	}
@@ -881,6 +916,8 @@ func (g *Graph) BatchTranslate(ids []ElementID, xOffset int, yOffset int) error 
 		position.Y += yOffset
 	}
 
+	g.wsTranslateElements(ids, xOffset, yOffset)
+
 	return nil
 }
 
@@ -940,12 +977,12 @@ func (g *Graph) BatchDelete(ids []ElementID) error {
 
 	// we have to signal BEFORE we delete, or else our websocket state updates
 	// won't know which parents to signal an update to. TODO: refactor
-	items := []*ElementItem{}
-	for _, id := range deleteOrdered {
-		items = append(items, &ElementItem{ID: pElementID(id)})
-	}
+	//items := []*ElementItem{}
+	//for _, id := range deleteOrdered {
+	//	items = append(items, &ElementItem{ID: pElementID(id)})
+	//}
 
-	g.wsDeleteElements(items)
+	g.wsDeleteElements(deleteOrdered)
 
 	//deleteState := make(map[ElementID][]ElementID)
 	// remove from graph, final element clean up, and build
@@ -1027,12 +1064,12 @@ func (g *Graph) BatchReset(ids []ElementID) error {
 	return nil
 }
 
-func (g *Graph) collateElements(elements []*ElementItem, idOnly bool) map[ElementID][]*Element {
+func (g *Graph) collateElements(elements []ElementID, idOnly bool) map[ElementID][]*Element {
 	parentsToUpdate := make(map[ElementID][]*Element)
 
 	// TODO this probably doesn't work for connections
-	for _, item := range elements {
-		parent, ok := g.elementParent[*item.ID]
+	for _, id := range elements {
+		parent, ok := g.elementParent[id]
 		if !ok {
 			continue
 		}
@@ -1051,9 +1088,9 @@ func (g *Graph) collateElements(elements []*ElementItem, idOnly bool) map[Elemen
 		}
 
 		if !idOnly {
-			parentsToUpdate[parent] = append(parentsToUpdate[parent], g.elements[*item.ID])
+			parentsToUpdate[parent] = append(parentsToUpdate[parent], g.elements[id])
 		} else {
-			parentsToUpdate[parent] = append(parentsToUpdate[parent], &Element{ID: item.ID})
+			parentsToUpdate[parent] = append(parentsToUpdate[parent], &Element{ID: pElementID(id)})
 		}
 	}
 
@@ -1062,7 +1099,7 @@ func (g *Graph) collateElements(elements []*ElementItem, idOnly bool) map[Elemen
 
 // wsCreateElements constructs the websocket state update given a set of
 // elements that have just been created.
-func (g *Graph) wsCreateElements(elements []*ElementItem) {
+func (g *Graph) wsCreateElements(elements []ElementID) {
 	updates := g.collateElements(elements, false)
 
 	for parent, elms := range updates {
@@ -1075,7 +1112,7 @@ func (g *Graph) wsCreateElements(elements []*ElementItem) {
 
 // wsTranslateElements constructs a websocket state update given a set
 // of elements that have been translated
-func (g *Graph) wsTranslateElements(elements []*ElementItem, x int, y int) {
+func (g *Graph) wsTranslateElements(elements []ElementID, x int, y int) {
 	updates := g.collateElements(elements, true)
 
 	for parent, elms := range updates {
@@ -1092,7 +1129,7 @@ func (g *Graph) wsTranslateElements(elements []*ElementItem, x int, y int) {
 
 // wsDeleteElements constructs a websocket state update given a set of
 // elements that have just been deleted.
-func (g *Graph) wsDeleteElements(elements []*ElementItem) {
+func (g *Graph) wsDeleteElements(elements []ElementID) {
 	updates := g.collateElements(elements, true)
 
 	for parent, elms := range updates {
