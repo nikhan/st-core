@@ -639,7 +639,7 @@ func TestWebsocket(t *testing.T) {
 	ids.Add("id", "init")
 	ids.Add("id", "logger")
 
-	// delete all elements
+	// translate elements
 	_, err = makeRequest(addr, "PUT", "/pattern?"+ids.Encode(), nil)
 	if err != nil {
 		t.Error(err)

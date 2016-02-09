@@ -35,8 +35,8 @@ type Graph struct {
 	routeToEdge    map[ElementID]map[ElementID]struct{}
 	routeToElement map[ElementID]map[ElementID]struct{}
 	index          int64
-	blockLibrary   map[string]core.Spec
-	sourceLibrary  map[string]core.SourceSpec
+	BlockLibrary   map[string]core.Spec
+	SourceLibrary  map[string]core.SourceSpec
 	*PubSub
 }
 
@@ -49,8 +49,8 @@ func NewGraph() *Graph {
 		routeToEdge:    make(map[ElementID]map[ElementID]struct{}),
 		routeToElement: make(map[ElementID]map[ElementID]struct{}),
 		index:          0,
-		blockLibrary:   core.GetLibrary(),
-		sourceLibrary:  core.GetSources(),
+		BlockLibrary:   core.GetLibrary(),
+		SourceLibrary:  core.GetSources(),
 		PubSub:         pubsub,
 	}
 
@@ -112,7 +112,7 @@ func (g *Graph) addRoutesFromPins(pins []core.Pin, direction string) ([]ElementI
 func (g *Graph) addBlock(e *Element) []ElementID {
 	var newIDs []ElementID
 
-	spec := g.blockLibrary[*e.Spec]
+	spec := g.BlockLibrary[*e.Spec]
 
 	if e.Routes == nil {
 		// no routes were sent with this block
@@ -180,7 +180,7 @@ func (g *Graph) addBlock(e *Element) []ElementID {
 func (g *Graph) addSource(e *Element) []ElementID {
 	var newIDs []ElementID
 
-	spec := g.sourceLibrary[*e.Spec]
+	spec := g.SourceLibrary[*e.Spec]
 
 	if e.Routes == nil {
 		elementType := ROUTE
@@ -371,8 +371,8 @@ func (g *Graph) validateSpec(element *Element) error {
 	if element.Spec == nil {
 		return errors.New("missing spec")
 	}
-	_, okBlock := g.blockLibrary[*element.Spec]
-	_, okSource := g.sourceLibrary[*element.Spec]
+	_, okBlock := g.BlockLibrary[*element.Spec]
+	_, okSource := g.SourceLibrary[*element.Spec]
 	if !(okBlock || okSource) {
 		return fmt.Errorf("invalid spec '%s'", *element.Spec)
 	}

@@ -2,7 +2,6 @@ package stserver
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"strconv"
@@ -214,7 +213,36 @@ func (s *Server) UpdateGroupRouteHandler(w http.ResponseWriter, r *http.Request)
 }
 
 func (s *Server) LibraryHandler(w http.ResponseWriter, r *http.Request) {
-	fmt.Println("library")
+	s.graph.Lock()
+	defer s.graph.Unlock()
+
+	type LibraryEntry struct {
+		Name string `json:"name"`
+		Type string `json:"type"`
+	}
+
+	library := make([]LibraryEntry, len(s.graph.BlockLibrary)+len(s.graph.SourceLibrary))
+
+	//TODO: cache the blocklibrary in server, possibly on server creation
+	index := 0
+	for key, _ := range s.graph.BlockLibrary {
+		library[index] = LibraryEntry{
+			Name: key,
+			Type: "block",
+		}
+		index++
+	}
+
+	for key, _ := range s.graph.SourceLibrary {
+		library[index] = LibraryEntry{
+			Name: key,
+			Type: "source",
+		}
+		index++
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(library)
 }
 
 func (s *Server) TranslateElementsHandler(w http.ResponseWriter, r *http.Request) {
