@@ -274,7 +274,7 @@ func (s *Server) DeleteElementsHandler(w http.ResponseWriter, r *http.Request) {
 	s.graph.Lock()
 	defer s.graph.Unlock()
 
-	if err := s.graph.BatchDelete(ids); err != nil {
+	if err := s.graph.BatchDelete(ids...); err != nil {
 		panic(err)
 	}
 }

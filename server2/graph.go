@@ -63,18 +63,23 @@ func NewGraph() *Graph {
 func (g *Graph) onSubscribe(topic string, subscription chan interface{}) {
 	id := ElementID(topic)
 
-	element, ok := g.elements[id]
+	_, ok := g.elements[id]
 	if !ok {
 		// there is nothing to subscribe to, we should create a
 		// group if there is nothing to subscribe to
-		return
+		g.Add([]*Element{&Element{
+			Type: pString(GROUP),
+			ID:   pElementID(id),
+		}}, nil)
+		log.Println("creating group")
+		//return
 	}
 
-	if *element.Type != GROUP {
-		// element is not a group, there is nothing we can do.
-		// TODO: handle this error
-		return
-	}
+	//if *element.Type != GROUP {
+	// element is not a group, there is nothing we can do.
+	// TODO: handle this error
+	//	return
+	//}
 
 	g.Lock()
 	defer g.Unlock()
@@ -279,6 +284,11 @@ func (g *Graph) deleteRouteAscending(parent ElementID, route ElementID) error {
 
 	g.elements[parent].Routes = append(g.elements[parent].Routes[:index], g.elements[parent].Routes[index+1:]...)
 
+	g.Publish(string(parent), Update{
+		Action: pString("delete"),
+		Data:   []*Element{&Element{ID: pElementID(route)}},
+	})
+
 	delete(g.routeToElement[route], parent)
 
 	if parentID, ok := g.elementParent[parent]; ok {
@@ -305,6 +315,12 @@ func (g *Graph) addChild(parent ElementID, child ElementID) {
 		}
 		g.addRouteAscending(parent, *route.ID)
 	}
+
+	g.Publish(string(parent), Update{
+		Action: pString("create"),
+		Data:   []*Element{g.elements[child]},
+	})
+
 }
 
 // deleteChild removes a child from a group.
@@ -324,6 +340,11 @@ func (g *Graph) deleteChild(parent ElementID, child ElementID) {
 	delete(g.elementParent, child)
 
 	group.Children = append(group.Children[:index], group.Children[index+1:]...)
+
+	g.Publish(string(parent), Update{
+		Action: pString("delete"),
+		Data:   []*Element{&Element{ID: g.elements[child].ID}},
+	})
 
 	for _, route := range node.Routes {
 		g.deleteRouteAscending(parent, *route.ID)
@@ -672,7 +693,7 @@ func (g *Graph) Add(elements []*Element, parent *ElementID) ([]ElementID, error)
 		}
 	}
 
-	g.wsCreateElements(newIDs)
+	//g.wsCreateElements(newIDs)
 	/*if parent != nil {
 		updateElements := make([]*Element, len(newIDs))
 		for i, item := range newIDs {
@@ -921,10 +942,30 @@ func (g *Graph) BatchTranslate(ids []ElementID, xOffset int, yOffset int) error 
 	return nil
 }
 
+func (g *Graph) ungroup(id ElementID) {
+	parent, ok := g.elementParent[id]
+	if !ok {
+		return
+	}
+
+	for _, child := range g.elements[id].Children {
+		g.deleteChild(id, *child.ID)
+		g.addChild(parent, *child.ID)
+	}
+
+	g.BatchDelete(id)
+}
+
 func (g *Graph) BatchUngroup(ids []ElementID) error {
 	err := g.validateIDs(ids...)
 	if err != nil {
 		return err
+	}
+
+	for _, id := range ids {
+		if *g.elements[id].Type == GROUP {
+			g.ungroup(id)
+		}
 	}
 
 	return nil
@@ -950,7 +991,7 @@ func (g *Graph) deleteConnection(id ElementID) {
 
 }
 
-func (g *Graph) BatchDelete(ids []ElementID) error {
+func (g *Graph) BatchDelete(ids ...ElementID) error {
 	err := g.validateIDs(ids...)
 	if err != nil {
 		return err
@@ -975,18 +1016,8 @@ func (g *Graph) BatchDelete(ids []ElementID) error {
 		}
 	}
 
-	// we have to signal BEFORE we delete, or else our websocket state updates
-	// won't know which parents to signal an update to. TODO: refactor
-	//items := []*ElementItem{}
-	//for _, id := range deleteOrdered {
-	//	items = append(items, &ElementItem{ID: pElementID(id)})
-	//}
+	//g.wsDeleteElements(deleteOrdered)
 
-	g.wsDeleteElements(deleteOrdered)
-
-	//deleteState := make(map[ElementID][]ElementID)
-	// remove from graph, final element clean up, and build
-	// state update message
 	for _, id := range deleteOrdered {
 		switch *g.elements[id].Type {
 		case GROUP:
@@ -998,59 +1029,16 @@ func (g *Graph) BatchDelete(ids []ElementID) error {
 		case BLOCK, SOURCE:
 			if parent, ok := g.elementParent[id]; ok {
 				g.deleteChild(parent, id)
-
-				// append id to delete to list of groups to be
-				// alerted by state change
-				//deletes, ok := deleteState[parent]
-				//if !ok {
-				//	deletes = []ElementID{}
-				//	deleteState[parent] = deletes
-				//}
-
-				//deleteState[parent] = append(deleteState[parent], id)
 			}
-
 		case CONNECTION, LINK:
 			delete(g.routeToEdge[*g.elements[id].TargetID], id)
 			delete(g.routeToEdge[*g.elements[id].SourceID], id)
 		case ROUTE:
-			//parent, ok := g.elementParent[id]
-			//if !ok {
-			//	log.Fatalf("graph has lost sync")
-			//}
-			//grandparent, ok := g.elementParent[parent]
-			//if !ok {
-			//	log.Fatalf("graph has lost sync")
-			//}
-
-			//deletes, ok := deleteState[grandparent]
-			//if !ok {
-			//	deletes = []ElementID{}
-			//	deleteState[grandparent] = deletes
-			//}
-
-			//deleteState[grandparent] = append(deleteState[grandparent], id)
-
 			delete(g.routeToElement, id)
 			delete(g.elementParent, id)
 		}
 		delete(g.elements, id)
 	}
-
-	// build and send state change for all elements
-	/*for parent, ids := range deleteState {
-		elements := make([]*Element, len(ids))
-		for i, id := range ids {
-			elements[i] = &Element{
-				ID: pElementID(id),
-			}
-		}
-
-		g.Publish(string(parent), Update{
-			Action: pString("delete"),
-			Data:   elements,
-		})
-	}*/
 
 	return nil
 }
@@ -1074,15 +1062,6 @@ func (g *Graph) collateElements(elements []ElementID, idOnly bool) map[ElementID
 			continue
 		}
 
-		// the grandparent of the route is the parent we need to update
-		//if *g.elements[*item.ID].Type == ROUTE {
-		//	var ok bool
-		//	if _, ok = g.elementParent[parent]; !ok {
-		//		continue
-		//	}
-		//	parent = g.elementParent[parent]
-		//}
-
 		if _, ok := parentsToUpdate[parent]; !ok {
 			parentsToUpdate[parent] = []*Element{}
 		}
@@ -1099,7 +1078,7 @@ func (g *Graph) collateElements(elements []ElementID, idOnly bool) map[ElementID
 
 // wsCreateElements constructs the websocket state update given a set of
 // elements that have just been created.
-func (g *Graph) wsCreateElements(elements []ElementID) {
+/*func (g *Graph) wsCreateElements(elements []ElementID) {
 	updates := g.collateElements(elements, false)
 
 	for parent, elms := range updates {
@@ -1108,7 +1087,7 @@ func (g *Graph) wsCreateElements(elements []ElementID) {
 			Data:   elms,
 		})
 	}
-}
+}*/
 
 // wsTranslateElements constructs a websocket state update given a set
 // of elements that have been translated
@@ -1129,7 +1108,7 @@ func (g *Graph) wsTranslateElements(elements []ElementID, x int, y int) {
 
 // wsDeleteElements constructs a websocket state update given a set of
 // elements that have just been deleted.
-func (g *Graph) wsDeleteElements(elements []ElementID) {
+/*func (g *Graph) wsDeleteElements(elements []ElementID) {
 	updates := g.collateElements(elements, true)
 
 	for parent, elms := range updates {
@@ -1138,7 +1117,7 @@ func (g *Graph) wsDeleteElements(elements []ElementID) {
 			Data:   elms,
 		})
 	}
-}
+}*/
 
 func (g *Graph) wsElementAlias(id ElementID, alias string) {
 
