@@ -55,6 +55,12 @@ func (s *Server) MelodyConnect(session *melody.Session) {
 			session.Write(out)
 		}
 	}()
+
+	s.graph.Lock()
+	defer s.graph.Unlock()
+
+	s.graph.Subscribe("/announce", s.hub.wsPubSub[session])
+
 	log.Println("WebSocket: Connect", s.hub.wsPubSub[session])
 }
 
@@ -63,7 +69,9 @@ func (s *Server) MelodyDisconnect(session *melody.Session) {
 	defer s.hub.Unlock()
 	log.Println("WebSocket: Disconnect", s.hub.wsPubSub[session])
 	s.graph.Unsubscribe(s.hub.wsPubSub[session])
-	close(s.hub.wsPubSub[session])
+	if s.hub.wsPubSub[session] != nil {
+		close(s.hub.wsPubSub[session])
+	}
 	delete(s.hub.wsPubSub, session)
 }
 
@@ -81,6 +89,9 @@ func (s *Server) MelodyMessage(session *melody.Session, msg []byte) {
 		return
 	}
 	// TODO: check ID
+	s.graph.Lock()
+	defer s.graph.Unlock()
+
 	s.graph.Subscribe(string(*req.ID), s.hub.wsPubSub[session])
 }
 
@@ -455,6 +466,8 @@ func (s *Server) NewRouter() *mux.Router {
 			Queries(route.Queries...).
 			Handler(handler)
 	}
+
+	router.PathPrefix("/").Handler(http.FileServer(http.Dir("./static/")))
 
 	return router
 }

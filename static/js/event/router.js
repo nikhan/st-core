@@ -3,7 +3,7 @@ var app = app || {};
 (function() {
 
     // this is a bad thing
-    var sanitizeEvent = {
+    /*var sanitizeEvent = {
         'block_create': app.Actions.WS_BLOCK_CREATE,
         'block_update': app.Actions.WS_BLOCK_UPDATE,
         'block_delete': app.Actions.WS_BLOCK_DELETE,
@@ -93,16 +93,16 @@ var app = app || {};
             default:
                 console.warn('unexpected: ', event);
         }
-    }
+    }*/
 
-    var ws = new WebSocket('ws://localhost:7071/updates');
+    var ws = new WebSocket('ws://localhost:7071/ws');
     ws.onmessage = function(m) {
-        app.Router(JSON.parse(m.data));
+        app.Dispatcher.dispatch(JSON.parse(m.data));
     }.bind(this)
 
-    ws.onopen = function() {
-        ws.send('list');
-    }
+    //ws.onopen = function() {
+    //    ws.send('{"id":"default"}');
+    //}
 
-    app.Router = router;
+    //app.Router = router;
 })();

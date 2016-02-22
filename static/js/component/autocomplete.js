@@ -69,7 +69,7 @@ var app = app || {};
         },
         _onEnter: function(match) {
             // TODO: move this to a api actions receiver.
-            app.Utils.request(
+            /*app.Utils.request(
                 'POST',
                 match.type, {
                     'type': match.name,
@@ -79,7 +79,15 @@ var app = app || {};
                         'y': this.props.relativeY
                     }
                 },
-                null)
+                null)*/
+            app.Dispatcher.dispatch({
+                action: 'request_create',
+                type: match.name,
+                position: {
+                    x: this.props.relativeX,
+                    y: this.props.relativeY
+                }
+            });
         },
         render: function() {
             var input = React.createElement('input', {

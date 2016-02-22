@@ -1,25 +1,27 @@
 (function() {
     var types = [];
 
-    function get(nodeType) {
+    function get() {
         app.Utils.request(
             'GET',
-            nodeType + '/library', {},
+            '/library', {},
             function(e) {
+                types = JSON.parse(e.response);
                 // TODO: fix the stupid schema in the server so we don't have to do this.
-                types = types.concat(JSON.parse(e.response).map(function(t) {
+                /*types = types.concat(JSON.parse(e.response).map(function(t) {
                     return {
                         name: t.type,
                         type: nodeType,
                         source: t.source,
                     }
-                }));
+                }));*/
             })
     }
 
     function Library() {
-        get('blocks');
-        get('sources');
+        get();
+        //get('blocks');
+        //get('sources');
     }
 
     Library.prototype = Object.create(app.Emitter.prototype);

@@ -53,40 +53,59 @@ func NewGraph() *Graph {
 		SourceLibrary:  core.GetSources(),
 		PubSub:         pubsub,
 	}
-
 	pubsub.OnSubscribe = graph.onSubscribe
 
 	return graph
 }
 
+// get all groups that have a parent of null
+func (g *Graph) GetRootGroups() []*Element {
+	groups := []*Element{}
+	for id, element := range g.elements {
+		if _, ok := g.elementParent[id]; ok {
+			continue
+		}
+
+		if *element.Type == GROUP {
+			groups = append(groups, element)
+		}
+	}
+	return groups
+}
+
 // called upon a new subscription
 func (g *Graph) onSubscribe(topic string, subscription chan interface{}) {
-	id := ElementID(topic)
+	switch topic {
+	case "/announce":
+		subscription <- Update{
+			Action: pString("root_group_create"),
+			Data:   g.GetRootGroups(),
+		}
+	default:
+		id := ElementID(topic)
 
-	_, ok := g.elements[id]
-	if !ok {
-		// there is nothing to subscribe to, we should create a
-		// group if there is nothing to subscribe to
-		g.Add([]*Element{&Element{
-			Type: pString(GROUP),
-			ID:   pElementID(id),
-		}}, nil)
-		log.Println("creating group")
-		//return
-	}
+		_, ok := g.elements[id]
+		if !ok {
+			// there is nothing to subscribe to, we should create a
+			// group if there is nothing to subscribe to
+			g.Add([]*Element{&Element{
+				Type: pString(GROUP),
+				ID:   pElementID(id),
+			}}, nil)
+			log.Println("creating group")
+			//return
+		}
 
-	//if *element.Type != GROUP {
-	// element is not a group, there is nothing we can do.
-	// TODO: handle this error
-	//	return
-	//}
+		//if *element.Type != GROUP {
+		// element is not a group, there is nothing we can do.
+		// TODO: handle this error
+		//	return
+		//}
 
-	g.Lock()
-	defer g.Unlock()
-
-	subscription <- Update{
-		Action: pString("create"), // TODO make constant for this
-		Data:   g.getElement(id, false, 1),
+		subscription <- Update{
+			Action: pString("create"), // TODO make constant for this
+			Data:   g.getElement(id, false, 1),
+		}
 	}
 }
 
@@ -249,7 +268,7 @@ func (g *Graph) addRouteAscending(parent ElementID, route ElementID) error {
 
 		g.routeToElement[route][parent] = struct{}{}
 
-		g.Publish(string(parent), Update{
+		g.Publish(pString(string(parent)), Update{
 			Action: pString("create"),
 			Data:   []*Element{g.elements[route]},
 		})
@@ -284,7 +303,7 @@ func (g *Graph) deleteRouteAscending(parent ElementID, route ElementID) error {
 
 	g.elements[parent].Routes = append(g.elements[parent].Routes[:index], g.elements[parent].Routes[index+1:]...)
 
-	g.Publish(string(parent), Update{
+	g.Publish(pString(string(parent)), Update{
 		Action: pString("delete"),
 		Data:   []*Element{&Element{ID: pElementID(route)}},
 	})
@@ -316,7 +335,7 @@ func (g *Graph) addChild(parent ElementID, child ElementID) {
 		g.addRouteAscending(parent, *route.ID)
 	}
 
-	g.Publish(string(parent), Update{
+	g.Publish(pString(string(parent)), Update{
 		Action: pString("create"),
 		Data:   []*Element{g.elements[child]},
 	})
@@ -341,7 +360,7 @@ func (g *Graph) deleteChild(parent ElementID, child ElementID) {
 
 	group.Children = append(group.Children[:index], group.Children[index+1:]...)
 
-	g.Publish(string(parent), Update{
+	g.Publish(pString(string(parent)), Update{
 		Action: pString("delete"),
 		Data:   []*Element{&Element{ID: g.elements[child].ID}},
 	})
@@ -691,6 +710,14 @@ func (g *Graph) Add(elements []*Element, parent *ElementID) ([]ElementID, error)
 		if ids != nil {
 			newIDs = append(newIDs, ids...)
 		}
+
+		// message all clients the creation of a root group.
+		if parent == nil && *element.Type == GROUP {
+			g.Publish(nil, Update{
+				Action: pString("root_group_create"),
+				Data:   []*Element{g.elements[*element.ID]},
+			})
+		}
 	}
 
 	//g.wsCreateElements(newIDs)
@@ -843,7 +870,7 @@ func (g *Graph) Update(id ElementID, update *Update) error {
 	if *g.elements[id].Type == ROUTE && update.Value != nil {
 		g.elements[id].Value = update.Value
 		for element, _ := range g.routeToElement[id] {
-			g.Publish(string(element), Update{
+			g.Publish(pString(string(element)), Update{
 				Action: pString("update_value"),
 				ID:     pElementID(id),
 				Value:  update.Value,
@@ -854,7 +881,7 @@ func (g *Graph) Update(id ElementID, update *Update) error {
 	if g.elements[id].isNode() && update.Position != nil {
 		g.elements[id].Position = update.Position
 		if parent, ok := g.elementParent[id]; ok {
-			g.Publish(string(parent), Update{
+			g.Publish(pString(string(parent)), Update{
 				Action:   pString("update_position"),
 				ID:       pElementID(id),
 				Position: update.Position,
@@ -865,7 +892,7 @@ func (g *Graph) Update(id ElementID, update *Update) error {
 	if g.elements[id].isNode() && update.Alias != nil {
 		g.elements[id].Alias = update.Alias
 		if parent, ok := g.elementParent[id]; ok {
-			g.Publish(string(parent), Update{
+			g.Publish(pString(string(parent)), Update{
 				Action: pString("update_alias"),
 				ID:     pElementID(id),
 				Alias:  update.Alias,
@@ -892,7 +919,7 @@ func (g *Graph) UpdateGroupRoute(id ElementID, routeID ElementID, update *Update
 		route.Alias = update.Alias
 
 		if parent, ok := g.elementParent[id]; ok {
-			g.Publish(string(parent), Update{
+			g.Publish(pString(string(parent)), Update{
 				Action: pString("update_group_route_alias"),
 				ID:     pElementID(id),
 				Route:  pElementID(routeID),
@@ -912,7 +939,7 @@ func (g *Graph) UpdateGroupRoute(id ElementID, routeID ElementID, update *Update
 		}
 
 		if parent, ok := g.elementParent[id]; ok {
-			g.Publish(string(parent), Update{
+			g.Publish(pString(string(parent)), Update{
 				Action: pString("update_group_route_hidden"),
 				ID:     pElementID(id),
 				Route:  pElementID(routeID),
@@ -1025,6 +1052,10 @@ func (g *Graph) BatchDelete(ids ...ElementID) error {
 			for _, child := range g.elements[id].Children {
 				delete(g.elementParent, *child.ID)
 			}
+
+			if _, ok := g.elementParent[id]; !ok {
+			}
+
 			fallthrough
 		case BLOCK, SOURCE:
 			if parent, ok := g.elementParent[id]; ok {
@@ -1095,7 +1126,7 @@ func (g *Graph) wsTranslateElements(elements []ElementID, x int, y int) {
 	updates := g.collateElements(elements, true)
 
 	for parent, elms := range updates {
-		g.Publish(string(parent), Update{
+		g.Publish(pString(string(parent)), Update{
 			Action: pString("translate"),
 			Position: &Position{
 				X: x,
