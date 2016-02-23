@@ -6,7 +6,7 @@ import (
 )
 
 type PubSubMessage struct {
-	Topic   *string
+	Topic   string
 	Message interface{}
 }
 
@@ -30,20 +30,20 @@ func (p *PubSub) listen() {
 	for {
 		select {
 		case m := <-p.publish:
-			if m.Topic != nil {
-				if subscribers, ok := p.topics[*m.Topic]; ok {
-					for subscriber, _ := range subscribers {
-						subscriber <- m.Message
-					}
+			//if m.Topic != nil {
+			if subscribers, ok := p.topics[m.Topic]; ok {
+				for subscriber, _ := range subscribers {
+					subscriber <- m.Message
 				}
-			} else {
+			}
+			/*} else {
 				for _, topic := range p.topics {
 					for subscriber, _ := range topic {
 						subscriber <- m.Message
 					}
 				}
-			}
-
+			}*/
+			//}
 		}
 	}
 }
@@ -74,7 +74,7 @@ func (p *PubSub) Unsubscribe(subscription chan interface{}) error {
 	return errors.New("could not delete channel, does not exist")
 }
 
-func (p *PubSub) Publish(topic *string, message interface{}) {
+func (p *PubSub) Publish(topic string, message interface{}) {
 	p.publish <- &PubSubMessage{
 		Topic:   topic,
 		Message: message,
