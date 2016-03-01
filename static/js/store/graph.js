@@ -16,7 +16,6 @@ var app = app || {};
     }
 
     app.Dispatcher.register(function(event) {
-        console.log(event);
         switch (event.action) {
             case 'request_create':
                 requestCreate(event);

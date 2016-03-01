@@ -68,10 +68,12 @@ func (s *Server) MelodyDisconnect(session *melody.Session) {
 	s.hub.Lock()
 	defer s.hub.Unlock()
 	log.Println("WebSocket: Disconnect", s.hub.wsPubSub[session])
-	s.graph.Unsubscribe(s.hub.wsPubSub[session])
+	s.graph.UnsubscribeAll(s.hub.wsPubSub[session])
+
 	if s.hub.wsPubSub[session] != nil {
 		close(s.hub.wsPubSub[session])
 	}
+
 	delete(s.hub.wsPubSub, session)
 }
 
@@ -88,11 +90,17 @@ func (s *Server) MelodyMessage(session *melody.Session, msg []byte) {
 	if err != nil {
 		return
 	}
+
 	// TODO: check ID
 	s.graph.Lock()
 	defer s.graph.Unlock()
 
-	s.graph.Subscribe(string(*req.ID), s.hub.wsPubSub[session])
+	switch *req.Action {
+	case "subscribe":
+		s.graph.Subscribe(string(*req.ID), s.hub.wsPubSub[session])
+	case "unsubscribe":
+		s.graph.Unsubscribe(string(*req.ID), s.hub.wsPubSub[session])
+	}
 }
 
 func (s *Server) WebSocketHandler(w http.ResponseWriter, r *http.Request) {

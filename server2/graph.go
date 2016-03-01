@@ -59,7 +59,7 @@ func NewGraph() *Graph {
 }
 
 // get all groups that have a parent of null
-func (g *Graph) GetRootGroups() []*Element {
+func (g *Graph) getRootGroups() []*Element {
 	groups := []*Element{}
 	for id, element := range g.elements {
 		if _, ok := g.elementParent[id]; ok {
@@ -79,7 +79,7 @@ func (g *Graph) onSubscribe(topic string, subscription chan interface{}) {
 	case "/announce":
 		subscription <- Update{
 			Action: pString("root_group_create"),
-			Data:   g.GetRootGroups(),
+			Data:   g.getRootGroups(),
 		}
 	default:
 		id := ElementID(topic)
@@ -101,6 +101,11 @@ func (g *Graph) onSubscribe(topic string, subscription chan interface{}) {
 		// TODO: handle this error
 		//	return
 		//}
+
+		subscription <- Update{
+			Action: pString("subscribe"),
+			ID:     pElementID(id),
+		}
 
 		subscription <- Update{
 			Action: pString("create"), // TODO make constant for this
@@ -1050,8 +1055,8 @@ func (g *Graph) BatchDelete(ids ...ElementID) error {
 		case GROUP:
 			if _, ok := g.elementParent[id]; !ok {
 				g.Publish("/announce", Update{
-					Action: pString("root_group_create"),
-					Data:   g.GetRootGroups(),
+					Action: pString("root_group_delete"),
+					Data:   []*Element{&Element{ID: pElementID(id)}},
 				})
 			}
 

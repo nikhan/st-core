@@ -95,10 +95,44 @@ var app = app || {};
         }
     }*/
 
+    var topic = null;
     var ws = new WebSocket('ws://localhost:7071/ws');
+
     ws.onmessage = function(m) {
+        console.log(m.data);
         app.Dispatcher.dispatch(JSON.parse(m.data));
     }.bind(this)
+
+    function unsubscribe(id) {
+        ws.send(JSON.stringify({
+            action: 'unsubscribe',
+            id: id
+        }));
+    }
+
+    function subscribe(event) {
+        ws.send(JSON.stringify({
+            action: 'subscribe',
+            id: event.id
+        }));
+    }
+
+    app.Dispatcher.register(function(event) {
+        switch (event.action) {
+            case 'subscribe':
+                topic = event.id;
+                break;
+            case 'app_request_subscribe':
+                if (topic !== null) {
+                    unsubscribe(topic);
+                }
+                app.Dispatcher.dispatch({
+                    action: 'app_reset_graph'
+                })
+                subscribe(event);
+                break;
+        }
+    });
 
     //ws.onopen = function() {
     //    ws.send('{"id":"default"}');

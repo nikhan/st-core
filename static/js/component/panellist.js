@@ -27,6 +27,7 @@ var app = app || {};
         },
         render: function() {
             var children = [
+                React.createElement(app.GroupListComponent, {}),
                 React.createElement(app.GroupTreeComponent, {})
             ];
 

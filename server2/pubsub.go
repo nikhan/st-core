@@ -1,9 +1,6 @@
 package stserver
 
-import (
-	"errors"
-	"sync"
-)
+import "sync"
 
 type PubSubMessage struct {
 	Topic   string
@@ -60,18 +57,20 @@ func (p *PubSub) Subscribe(topic string, subscription chan interface{}) {
 	p.OnSubscribe(topic, subscription)
 }
 
-func (p *PubSub) Unsubscribe(subscription chan interface{}) error {
+func (p *PubSub) Unsubscribe(topic string, subscription chan interface{}) {
 	p.Lock()
 	defer p.Unlock()
+
+	delete(p.topics[topic], subscription)
+}
+
+func (p *PubSub) UnsubscribeAll(subscription chan interface{}) {
+	p.Lock()
+	defer p.Unlock()
+
 	for _, topic := range p.topics {
-		for subscriber, _ := range topic {
-			if subscriber == subscription {
-				delete(topic, subscription)
-				return nil
-			}
-		}
+		delete(topic, subscription)
 	}
-	return errors.New("could not delete channel, does not exist")
 }
 
 func (p *PubSub) Publish(topic string, message interface{}) {

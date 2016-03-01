@@ -10,6 +10,19 @@ var app = app || {};
 
     app.CoreApp = React.createClass({
         displayName: 'CoreApp',
+        componentDidMount: function() {
+            window.addEventListener('hashchange', this._onHashChange.bind(this));
+        },
+        componentWillUnmount: function() {
+            // TODO: fix, bind() returns new function ref.
+            window.removeEventListener('hashchange', this._onHashChange);
+        },
+        _onHashChange: function(e) {
+            app.Dispatcher.dispatch({
+                action: 'app_request_subscribe',
+                id: window.location.hash.substr(1)
+            });
+        },
         getInitialState: function() {
             return {
                 autoCompleteVisible: false,
